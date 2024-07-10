@@ -56,7 +56,7 @@ endif ()
 
 # Read libtool version info from configure.ac
 set(R "m4_define\\(\\[lt_([a-z]+)\\], ([0-9]+)\\)")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/configure.ac" CONFIGAC
+file(STRINGS "configure.ac" CONFIGAC
   REGEX ${R})
 foreach(_S ${CONFIGAC})
   string(REGEX REPLACE ${R} "\\1" k ${_S})
@@ -69,7 +69,7 @@ set(FULL_VER "${SO_current_minus_age}.${SO_revision}.${SO_age}")
 
 # Read package version info from configure.ac
 set(R "AC_INIT\\(RtMidi, ([0-9\\.]+),.*\\)")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/configure.ac" CONFIGAC
+file(STRINGS "configure.ac" CONFIGAC
   REGEX ${R})
 string(REGEX REPLACE ${R} "\\1" PACKAGE_VERSION ${CONFIGAC})
 
@@ -198,17 +198,17 @@ if (NOT DEFINED RTMIDI_BUILD_TESTING OR RTMIDI_BUILD_TESTING STREQUAL "")
   set(RTMIDI_BUILD_TESTING ${BUILD_TESTING})
 endif()
 if (RTMIDI_BUILD_TESTING)
-  add_executable(cmidiin    tests/cmidiin.cpp)
-  add_executable(midiclock  tests/midiclock.cpp)
-  add_executable(midiout    tests/midiout.cpp)
-  add_executable(midiprobe  tests/midiprobe.cpp)
-  add_executable(qmidiin    tests/qmidiin.cpp)
-  add_executable(sysextest  tests/sysextest.cpp)
-  add_executable(apinames   tests/apinames.cpp)
+  add_executable(cmidiin tests/cmidiin.cpp)
+  add_executable(midiclock tests/midiclock.cpp)
+  add_executable(midiout tests/midiout.cpp)
+  add_executable(midiprobe tests/midiprobe.cpp)
+  add_executable(qmidiin tests/qmidiin.cpp)
+  add_executable(sysextest tests/sysextest.cpp)
+  add_executable(apinames tests/apinames.cpp)
   list(GET LIB_TARGETS 0 LIBRTMIDI)
   set_target_properties(cmidiin midiclock midiout midiprobe qmidiin sysextest apinames
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY tests
-               INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
+               INCLUDE_DIRECTORIES .
                LINK_LIBRARIES ${LIBRTMIDI})
   add_test(NAME apinames COMMAND apinames)
 endif()
@@ -223,7 +223,7 @@ message(STATUS "Compiling with support for: ${apilist}")
 # PkgConfig file
 string(REPLACE ";" " " req "${PKGCONFIG_REQUIRES}")
 string(REPLACE ";" " " api "${API_DEFS}")
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/rtmidi.pc.in" "rtmidi.pc" @ONLY)
+configure_file("rtmidi.pc.in" "rtmidi.pc" @ONLY)
 
 # Add install rule.
 install(TARGETS ${LIB_TARGETS}
@@ -261,7 +261,7 @@ install(EXPORT RtMidiTargets
 
 # Configure uninstall target.
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RtMidiConfigUninstall.cmake.in"
+    "cmake/RtMidiConfigUninstall.cmake.in"
     "${CMAKE_BINARY_DIR}/RtMidiConfigUninstall.cmake" @ONLY)
 
 # Create uninstall target.

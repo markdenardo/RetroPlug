@@ -6,6 +6,8 @@
 #include "Test/TestControls.h"
 #endif
 
+#include <filesystem>
+
 enum EParam
 {
   kParamDummy = 0,
@@ -24,7 +26,7 @@ IGraphicsTest::IGraphicsTest(const InstanceInfo& info)
   
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
-    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
+    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
   };
   
   mLayoutFunc = [&](IGraphics* pGraphics) {
@@ -49,7 +51,7 @@ IGraphicsTest::IGraphicsTest(const InstanceInfo& info)
       if(!isUp) {
         switch (key.VK) {
           case kVK_TAB:
-            dynamic_cast<IPanelControl*>(GetUI()->GetBackgroundControl())->SetPattern(IColor::GetRandomColor());
+            GetUI()->GetBackgroundControl()->As<IPanelControl>()->SetPattern(IColor::GetRandomColor());
             break;
             
           default:
@@ -95,16 +97,27 @@ IGraphicsTest::IGraphicsTest(const InstanceInfo& info)
     "TextOrientation",
     "TextSize",
     "MPS (NanoVG MTL only)",
-    "OpenGL (NanoVG GL only)",
+    "Custom Shader (NanoVG only)",
     "Gesture Recognizers (iOS only)",
-    "MultiTouch (iOS/Windows only)",
+    "MultiTouch (iOS/Win/Web only)",
     "FlexBox",
-    "Mask"
+    "Mask",
+    "DirBrowse",
+    "DragNDrop",
     };
     
-    auto chooseTestControl = [&, pGraphics, testRect](int idx) {
+    WDL_String resourcePath;
 
-      pGraphics->RemoveControlWithTag(kCtrlTagTestControl);
+    #ifdef OS_MAC
+    BundleResourcePath(resourcePath, BUNDLE_ID);
+    #else
+    namespace fs = std::filesystem;
+    fs::path mainPath(__FILE__);
+    fs::path imgResourcesPath = mainPath.parent_path() / "Resources" / "img";
+    resourcePath.Set(imgResourcesPath.string().c_str());
+    #endif
+
+    auto chooseTestControl = [&, pGraphics, testRect, resourcePath](int idx) {
       
       IControl* pNewControl = nullptr;
       
@@ -130,12 +143,13 @@ IGraphicsTest::IGraphicsTest(const InstanceInfo& info)
         case 18: pNewControl = new TestTextOrientationControl(testRect, kParamDummy); break;
         case 19: pNewControl = new TestTextSizeControl(testRect, kParamDummy); break;
         case 20: pNewControl = new TestMPSControl(testRect, pGraphics->LoadBitmap(SMILEY_FN), kParamDummy); break;
-        case 21: pNewControl = new TestGLControl(testRect); break;
+        case 21: pNewControl = new TestCustomShaderControl(testRect, kParamDummy); break;
         case 22: pNewControl = new TestGesturesControl(testRect); break;
         case 23: pNewControl = new TestMTControl(testRect); pNewControl->SetWantsMultiTouch(true); break;
         case 24: pNewControl = new TestFlexBoxControl(testRect); break;
         case 25: pNewControl = new TestMaskControl(testRect, pGraphics->LoadBitmap(SMILEY_FN)); break;
-
+        case 26: pNewControl = new TestDirBrowseControl(testRect, "png", resourcePath.Get()); break;
+        case 27: pNewControl = new TestDragAndDropControl(testRect); break;
       }
       
       if(pNewControl)
@@ -144,16 +158,17 @@ IGraphicsTest::IGraphicsTest(const InstanceInfo& info)
       SendCurrentParamValuesFromDelegate();
     };
     
-    pGraphics->AttachControl(new IVRadioButtonControl(bounds.FracRectHorizontal(0.2),
+    pGraphics->AttachControl(new IVRadioButtonControl(bounds.FracRectHorizontal(0.2f),
                                                       [pGraphics, chooseTestControl](IControl* pCaller) {
+                                                        pGraphics->RemoveControlWithTag(kCtrlTagTestControl);
                                                         SplashClickActionFunc(pCaller);
-                                                        int selectedTest = dynamic_cast<IVRadioButtonControl*>(pCaller)->GetSelectedIdx();
+                                                        int selectedTest = pCaller->As<IVRadioButtonControl>()->GetSelectedIdx();
                                                         chooseTestControl(selectedTest);
                                                       },
                                                       testNames
                                                       ));
     
-    pGraphics->AttachControl(new IVSliderControl(bounds.FracRectHorizontal(0.2, true).GetCentredInside(100, 200), kParamDummy, "Value"));
+    pGraphics->AttachControl(new IVSliderControl(bounds.FracRectHorizontal(0.2f, true).GetCentredInside(100, 200), kParamDummy, "Value"));
 
     pGraphics->AttachControl(new GFXLabelControl(bounds.GetFromTRHC(230, 50)));//.GetTranslated(25, -25)));
     

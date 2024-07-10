@@ -1,7 +1,7 @@
 
 project(basicsample)
 
-include_directories(../../lib/include/)
+include_directories(../../lib/include)
 
 file(GLOB_RECURSE sources *.cpp)
 
@@ -13,11 +13,11 @@ if(ANDROID)
 	add_library(basicsample SHARED ${sources})
 elseif(APPLE AND IOS)
   set(imagessources
-    "${CMAKE_CURRENT_LIST_DIR}/../../extern/ios/Launch Screen.storyboard"
+    "../../extern/ios/Launch Screen.storyboard"
   )
   add_executable(basicsample "MACOSX_BUNDLE" ${sources} ${mmsources} ${imagessources})
   set_target_properties( basicsample PROPERTIES
-    XCODE_ATTRIBUTE_INFOPLIST_FILE "${CMAKE_CURRENT_LIST_DIR}/../../extern/ios/Info.plist"
+    XCODE_ATTRIBUTE_INFOPLIST_FILE "../../extern/ios/Info.plist"
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "iPhone Developer"
   )
   target_link_libraries(basicsample ${UIKIT} ${QUARTZCORE})

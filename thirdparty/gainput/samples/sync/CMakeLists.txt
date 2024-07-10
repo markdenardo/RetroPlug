@@ -1,8 +1,8 @@
 
 project(syncsample)
 
-include_directories(../../lib/include/)
-include_directories(../samplefw/)
+include_directories(../../lib/include)
+include_directories(../samplefw)
 
 file(GLOB_RECURSE sources *.cpp)
 file(GLOB_RECURSE sfwsources ../samplefw/*.cpp)

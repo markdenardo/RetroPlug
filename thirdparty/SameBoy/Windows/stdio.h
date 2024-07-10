@@ -1,7 +1,19 @@
 #pragma once
+
+#ifdef noinline
+#undef noinline
 #include_next <stdio.h>
-#include <stdlib.h>
+#define noinline __attribute__((noinline))
+#else
+#include_next "stdio.h"
+#endif
+
+#include "stdlib.h"
 #include <stdarg.h>
+
+#if _WIN64
+#define fseek(...) _fseeki64(__VA_ARGS__)
+#endif
 
 int access(const char *filename, int mode);
 #define R_OK 4

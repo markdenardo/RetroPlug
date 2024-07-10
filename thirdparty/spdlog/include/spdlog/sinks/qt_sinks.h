@@ -12,7 +12,7 @@
 // QObject, and then use a standard signal/slot.
 //
 
-#include "../../../../minizip-ng/lib/zstd/examples/common.h"
+#include "spdlog/common.h"
 #include "spdlog/details/log_msg.h"
 #include "spdlog/details/synchronous_factory.h"
 #include "spdlog/sinks/base_sink.h"

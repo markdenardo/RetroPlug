@@ -1,7 +1,7 @@
 /*
     WDL - dirscan.h
     Copyright (C) 2005 and later Cockos Incorporated
-  
+
     This software is provided 'as-is', without any express or implied
     warranty.  In no event will the authors be held liable for any damages
     arising from the use of this software.
@@ -17,17 +17,17 @@
     2. Altered source versions must be plainly marked as such, and must not be
        misrepresented as being the original software.
     3. This notice may not be removed or altered from any source distribution.
-      
+
 */
 
 /*
 
-  This file provides the interface and implementation for WDL_DirScan, a simple 
+  This file provides the interface and implementation for WDL_DirScan, a simple
   (and somewhat portable) directory reading class. On non-Win32 systems it wraps
-  opendir()/readdir()/etc. On Win32, it uses FindFirst*, and supports wildcards as 
+  opendir()/readdir()/etc. On Win32, it uses FindFirst*, and supports wildcards as
   well.
 
- 
+
 */
 
 
@@ -40,12 +40,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+extern struct stat wdl_stat_chk;
+// if this fails on linux, use CFLAGS += -D_FILE_OFFSET_BITS=64
+typedef char wdl_dirscan_assert_failed_stat_not_64[sizeof(wdl_stat_chk.st_size)!=8 ? -1 : 1];
 #endif
 
 class WDL_DirScan
 {
   public:
-    WDL_DirScan() : 
+    WDL_DirScan() :
 #ifdef _WIN32
        m_h(INVALID_HANDLE_VALUE)
   #ifndef WDL_NO_SUPPORT_UTF8
@@ -73,7 +76,7 @@ class WDL_DirScan
       if (l < 1) return -1;
 
 #ifdef _WIN32
-      if (!isExactSpec) 
+      if (!isExactSpec)
       {
         if (dirname[l-1] == '\\' || dirname[l-1] == '/') scanstr.SetLen(l-1);
         m_leading_path = scanstr;
@@ -90,7 +93,7 @@ class WDL_DirScan
         if (idx > 0) m_leading_path.SetLen(idx);
       }
 #else
-    	 if (dirname[l-1] == '\\' || dirname[l-1] == '/') scanstr.SetLen(l-1);
+      if (dirname[l-1] == '\\' || dirname[l-1] == '/') scanstr.SetLen(l-1);
       m_leading_path = scanstr;
       if (!scanstr.GetLength()) scanstr.Set("/"); // fix for scanning /
 #endif
@@ -111,23 +114,29 @@ class WDL_DirScan
         if (reqbuf > 1000)
         {
           WDL_TypedBuf<WCHAR> tmp;
-          tmp.Resize(reqbuf+10);
-          if (MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,scanstr.Get(),-1,tmp.Get(),tmp.GetSize()))
+          tmp.Resize(reqbuf+20);
+          if (MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,scanstr.Get(),-1,tmp.Get(),tmp.GetSize()-10))
+          {
+            correctlongpath(tmp.Get());
             m_h=FindFirstFileW(tmp.Get(),&m_fd);
+          }
         }
         else
         {
           WCHAR wfilename[1024];
-          if (MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,scanstr.Get(),-1,wfilename,1024))
+          if (MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,scanstr.Get(),-1,wfilename,1024-10))
+          {
+            correctlongpath(wfilename);
             m_h=FindFirstFileW(wfilename,&m_fd);
+          }
         }
       }
-      
+
       if (m_h==INVALID_HANDLE_VALUE) m_wcmode=false;
-      
+
       if (m_h==INVALID_HANDLE_VALUE)
     #endif
-        m_h=FindFirstFile(scanstr.Get(),(WIN32_FIND_DATA*)&m_fd);
+        m_h=FindFirstFileA(scanstr.Get(),(WIN32_FIND_DATAA*)&m_fd);
       return (m_h == INVALID_HANDLE_VALUE);
 #else
       m_ent=0;
@@ -142,7 +151,7 @@ class WDL_DirScan
   #ifndef WDL_NO_SUPPORT_UTF8
       if (m_wcmode) return !FindNextFileW(m_h,&m_fd);
   #endif
-      return !FindNextFile(m_h,(WIN32_FIND_DATA*)&m_fd);
+      return !FindNextFileA(m_h,(WIN32_FIND_DATAA*)&m_fd);
 #else
       if (!m_h) return -1;
       return !(m_ent=readdir(m_h));
@@ -160,8 +169,8 @@ class WDL_DirScan
     }
 
 #ifdef _WIN32
-    const char *GetCurrentFN() 
-    { 
+    const char *GetCurrentFN()
+    {
 #ifndef WDL_NO_SUPPORT_UTF8
       if (m_wcmode)
       {
@@ -170,49 +179,63 @@ class WDL_DirScan
         return m_tmpbuf;
       }
 #endif
-      return ((WIN32_FIND_DATA *)&m_fd)->cFileName; 
+      return ((WIN32_FIND_DATAA *)&m_fd)->cFileName;
     }
 #else
     const char *GetCurrentFN() const { return m_ent?m_ent->d_name : ""; }
 #endif
     template<class T> void GetCurrentFullFN(T *str)
-    { 
-      str->Set(m_leading_path.Get()); 
+    {
+      str->Set(m_leading_path.Get());
 #ifdef _WIN32
-      str->Append("\\"); 
+      str->Append("\\");
 #else
-      str->Append("/"); 
+      str->Append("/");
 #endif
-      str->Append(GetCurrentFN()); 
+      str->Append(GetCurrentFN());
     }
-    int GetCurrentIsDirectory() const
-    { 
+    int GetCurrentIsDirectory() const // returns 1 if dir, 2 if symlink to dir, 4 if possibly-recursive symlink to dir
+    {
 #ifdef _WIN32
-       return !!(m_fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY); 
+       return !!(m_fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
 #else
-#ifndef __APPLE__
-       // we could enable this on OSX, need to check to make sure realpath(x,NULL) is supported on 10.5+
        char tmp[2048];
-       if (m_ent && m_ent->d_type == DT_LNK)
+       if (m_ent) switch (m_ent->d_type)
        {
-         snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),m_ent->d_name);
-         char *rp = realpath(tmp,NULL);
-         if (rp)
+         case DT_DIR: return 1;
+         case DT_LNK:
          {
-           DIR *d = opendir(rp);
-           free(rp);
+           snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),m_ent->d_name);
+           char *rp = realpath(tmp,NULL);
+           if (!rp) return 0;
 
+           struct stat sb;
+           int ret = (!stat(rp,&sb) && (sb.st_mode & S_IFMT) == S_IFDIR) ? 2 : 0;
+           if (ret)
+           {
+             // treat symlinks of /path/to/foo -> /path from being resolved (avoiding obvious feedback loops)
+             const int rpl = (int) strlen(rp);
+             if (
+#ifdef __APPLE__
+               !strnicmp(rp,m_leading_path.Get(),rpl)
+#else
+               !strncmp(rp,m_leading_path.Get(),rpl)
+#endif
+                 && (m_leading_path.Get()[rpl] == '/' || m_leading_path.Get()[rpl] == 0)
+                 ) ret = 4;
+           }
+           free(rp);
+           return ret;
+         }
+         case DT_UNKNOWN:
+         {
+           snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),m_ent->d_name);
+           DIR *d = opendir(tmp);
            if (d) { closedir(d); return 1; }
+           return 0;
          }
        }
-       else if (m_ent && m_ent->d_type == DT_UNKNOWN)
-       {
-         snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),m_ent->d_name);
-         DIR *d = opendir(tmp);
-         if (d) { closedir(d); return 1; }
-       }
-#endif
-       return m_ent && (m_ent->d_type == DT_DIR);
+       return 0;
 #endif
     }
 
@@ -229,8 +252,8 @@ class WDL_DirScan
   {
     char tmp[2048];
     snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),GetCurrentFN());
-    struct stat64 st={0,};
-    stat64(tmp,&st);
+    struct stat st={0,};
+    stat(tmp,&st);
     unsigned long long a=(unsigned long long)st.st_ctime; // seconds since january 1st, 1970
     a+=11644473600ull; // 1601->1970
     a*=10000000; // seconds to 1/10th microseconds (100 nanoseconds)
@@ -239,11 +262,11 @@ class WDL_DirScan
   }
 
   void GetCurrentLastWriteTime(FILETIME *ft)
-  { 
+  {
     char tmp[2048];
     snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),GetCurrentFN());
-    struct stat64 st={0,};
-    stat64(tmp,&st);
+    struct stat st={0,};
+    stat(tmp,&st);
     unsigned long long a=(unsigned long long)st.st_mtime; // seconds since january 1st, 1970
     a+=11644473600ull; // 1601->1970
     a*=10000000; // seconds to 1/10th microseconds (100 nanoseconds)
@@ -251,16 +274,16 @@ class WDL_DirScan
     ft->dwHighDateTime=a>>32;
   }
   DWORD GetCurrentFileSize(DWORD *HighWord=NULL)
-  { 
+  {
     char tmp[2048];
     snprintf(tmp,sizeof(tmp),"%s/%s",m_leading_path.Get(),GetCurrentFN());
-    struct stat64 st={0,};
-    stat64(tmp,&st);
-    
-    if (HighWord) *HighWord = (DWORD)(st.st_size>>32); 
-    return (DWORD)(st.st_size&0xffffffff); 
+    struct stat st={0,};
+    stat(tmp,&st);
+
+    if (HighWord) *HighWord = (DWORD)(st.st_size>>32);
+    return (DWORD)(st.st_size&0xffffffff);
   }
-  
+
 #endif
 
   private:
@@ -271,7 +294,7 @@ class WDL_DirScan
     WIN32_FIND_DATAW m_fd;
     char m_tmpbuf[MAX_PATH*5]; // even if each byte gets encoded as 4 utf-8 bytes this should be plenty ;)
 #else
-    WIN32_FIND_DATA m_fd;
+    WIN32_FIND_DATAA m_fd;
 #endif
     HANDLE m_h;
 #else
@@ -279,6 +302,28 @@ class WDL_DirScan
     struct dirent *m_ent;
 #endif
     WDL_FastString m_leading_path;
+
+#ifdef _WIN32
+  static void correctlongpath(WCHAR *buf) // this also exists as wdl_utf8_correctlongpath
+  {
+    const WCHAR *insert;
+    WCHAR *wr;
+    int skip = 0;
+    if (!buf || !buf[0] || wcslen(buf) < 256) return;
+    if (buf[1] == ':') insert=L"\\\\?\\";
+    else if (buf[0] == '\\' && buf[1] == '\\') { insert = L"\\\\?\\UNC\\"; skip=2; }
+    else return;
+
+    wr = buf + wcslen(insert);
+    memmove(wr, buf + skip, (wcslen(buf+skip)+1)*2);
+    memmove(buf,insert,wcslen(insert)*2);
+    while (*wr)
+    {
+      if (*wr == '/') *wr = '\\';
+      wr++;
+    }
+  }
+#endif
 } WDL_FIXALIGN;
 
 #endif

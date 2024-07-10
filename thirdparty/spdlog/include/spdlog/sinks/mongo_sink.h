@@ -10,7 +10,7 @@
 // http://mongocxx.org/mongocxx-v3/installation/
 //
 
-#include "../../../../minizip-ng/lib/zstd/examples/common.h"
+#include "spdlog/common.h"
 #include "spdlog/details/log_msg.h"
 #include "spdlog/sinks/base_sink.h"
 #include <spdlog/details/synchronous_factory.h>

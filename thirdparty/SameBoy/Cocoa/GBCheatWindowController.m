@@ -42,7 +42,7 @@
     return nil;
 }
 
-- (nullable id)tableView:(NSTableView *)tableView objectValueForTableColumn:(nullable NSTableColumn *)tableColumn row:(NSInteger)row
+- (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
 {
     size_t cheatCount;
     GB_gameboy_t *gb = self.document.gameboy;
@@ -58,7 +58,7 @@
                 return @NO;
                 
             case 2:
-                return @"Add Cheat...";
+                return @"Add Cheat…";
             
             case 3:
                 return @"";
@@ -92,10 +92,12 @@
                             self.importCodeField.stringValue.UTF8String,
                             self.importDescriptionField.stringValue.UTF8String,
                             true)) {
-            self.importCodeField.stringValue = @"";
-            self.importDescriptionField.stringValue = @"";
-            [self.cheatsTable reloadData];
-            [self tableViewSelectionDidChange:nil];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.importCodeField.stringValue = @"";
+                self.importDescriptionField.stringValue = @"";
+                [self.cheatsTable reloadData];
+                [self tableViewSelectionDidChange:nil];
+            });
         }
         else {
             dispatch_async(dispatch_get_main_queue(), ^{

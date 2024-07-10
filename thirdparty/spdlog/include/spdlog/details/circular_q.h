@@ -7,7 +7,7 @@
 #include <cassert>
 #include <vector>
 
-#include "../../../../minizip-ng/lib/zstd/examples/common.h"
+#include "spdlog/common.h"
 
 namespace spdlog {
 namespace details {

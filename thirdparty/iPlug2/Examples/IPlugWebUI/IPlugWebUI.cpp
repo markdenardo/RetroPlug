@@ -2,18 +2,18 @@
 #include "IPlug_include_in_plug_src.h"
 
 IPlugWebUI::IPlugWebUI(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPrograms))
+: Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
-  GetParam(kGain)->InitGain("Gain", 0., -70, 0.);
-
-  // Hard-coded paths must be modified!
-#ifdef OS_WIN
-  SetWebViewPaths("C:\\Users\\oli\\Dev\\iPlug2\\Examples\\IPlugWebUI\\WebView2Loader.dll", "C:\\Users\\oli\\Dev\\iPlug2\\Examples\\IPlugWebUI\\");
+  GetParam(kGain)->InitGain("Gain", -70., -70, 0.);
+  
+#ifdef DEBUG
+  SetEnableDevTools(true);
 #endif
-
+  
+  // Hard-coded paths must be modified!
   mEditorInitFunc = [&]() {
 #ifdef OS_WIN
-    LoadFile("C:\\Users\\oli\\Dev\\iPlug2\\Examples\\IPlugWebUI\\resources\\web\\index.html", nullptr);
+    LoadFile(R"(C:\Users\oli\Dev\iPlug2\Examples\IPlugWebUI\resources\web\index.html)", nullptr);
 #else
     LoadFile("index.html", GetBundleID());
 #endif
@@ -21,9 +21,9 @@ IPlugWebUI::IPlugWebUI(const InstanceInfo& info)
     EnableScroll(false);
   };
   
-  MakePreset("One", 0.);
+  MakePreset("One", -70.);
   MakePreset("Two", -30.);
-  MakePreset("Three", 40.);
+  MakePreset("Three", 0.);
 }
 
 void IPlugWebUI::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
@@ -54,23 +54,37 @@ void IPlugWebUI::OnReset()
 
 bool IPlugWebUI::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
 {
-  if(msgTag == kMsgTagButton1)
+  if (msgTag == kMsgTagButton1)
     Resize(512, 335);
   else if(msgTag == kMsgTagButton2)
     Resize(1024, 335);
   else if(msgTag == kMsgTagButton3)
     Resize(1024, 768);
+  else if (msgTag == kMsgTagBinaryTest)
+  {
+    auto uint8Data = reinterpret_cast<const uint8_t*>(pData);
+    DBGMSG("Data Size %i bytes\n",  dataSize);
+    DBGMSG("Byte values: %i, %i, %i, %i\n", uint8Data[0], uint8Data[1], uint8Data[2], uint8Data[3]);
+  }
 
   return false;
 }
 
 void IPlugWebUI::OnIdle()
 {
-  if(mLastPeak > 0.01)
+  if (mLastPeak > 0.01)
     SendControlValueFromDelegate(kCtrlTagMeter, mLastPeak);
 }
 
 void IPlugWebUI::OnParamChange(int paramIdx)
 {
   DBGMSG("gain %f\n", GetParam(paramIdx)->Value());
+}
+
+void IPlugWebUI::ProcessMidiMsg(const IMidiMsg& msg)
+{
+  TRACE;
+  
+  msg.PrintMsg();
+  SendMidiMsg(msg);
 }

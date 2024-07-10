@@ -12,7 +12,7 @@
 #import "IPlugAUPlayer.h"
 #import "IPlugAUAudioUnit.h"
 
-#include "config.h"
+#include "../../../../../config/config.h"
 
 #import "IPlugAUViewController.h"
 #import <CoreAudioKit/CoreAudioKit.h>
@@ -24,30 +24,27 @@
 @interface AppViewController ()
 {
   IPlugAUPlayer* player;
-  IPlugAUViewController* iplugViewController;
-  IBOutlet UIView *auView;
+  IPLUG_AUVIEWCONTROLLER* pluginVC;
+  IBOutlet UIView* auView;
 }
 @end
 
 @implementation AppViewController
 
-- (BOOL)prefersStatusBarHidden
+- (BOOL) prefersStatusBarHidden
 {
   return YES;
 }
 
-- (void)viewDidLoad
+- (void) viewDidLoad
 {
   [super viewDidLoad];
 
 #if PLUG_HAS_UI
   NSString* storyBoardName = [NSString stringWithFormat:@"%s-iOS-MainInterface", PLUG_NAME];
-
   UIStoryboard* storyboard = [UIStoryboard storyboardWithName:storyBoardName bundle: nil];
-
-  iplugViewController = [storyboard instantiateViewControllerWithIdentifier:@"main"];
-
-  [self addChildViewController:iplugViewController];
+  pluginVC = [storyboard instantiateViewControllerWithIdentifier:@"main"];
+  [self addChildViewController:pluginVC];
 #endif
   
   AudioComponentDescription desc;
@@ -69,12 +66,12 @@
   desc.componentFlags = 0;
   desc.componentFlagsMask = 0;
 
-  [AUAudioUnit registerSubclass: IPlugAUAudioUnit.class asComponentDescription:desc name:@"Local AUv3" version: UINT32_MAX];
+  [AUAudioUnit registerSubclass: IPLUG_AUAUDIOUNIT.class asComponentDescription:desc name:@"Local AUv3" version: UINT32_MAX];
 
   player = [[IPlugAUPlayer alloc] initWithComponentType:desc.componentType];
 
   [player loadAudioUnitWithComponentDescription:desc completion:^{
-    self->iplugViewController.audioUnit = (IPlugAUAudioUnit*) self->player.currentAudioUnit;
+    self->pluginVC.audioUnit = (IPLUG_AUAUDIOUNIT*) self->player.currentAudioUnit;
 
     [self embedPlugInView];
   }];
@@ -82,13 +79,13 @@
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveNotification:) name:@"LaunchBTMidiDialog" object:nil];
 }
 
--(void) receiveNotification:(NSNotification*)notification
+- (void) receiveNotification:(NSNotification*) notification
 {
   if ([notification.name isEqualToString:@"LaunchBTMidiDialog"])
   {
-    NSDictionary* dic = notification.userInfo;
-    NSNumber* x = (NSNumber*) dic[@"x"];
-    NSNumber* y = (NSNumber*) dic[@"y"];
+    NSDictionary* dict = notification.userInfo;
+    NSNumber* x = (NSNumber*) dict[@"x"];
+    NSNumber* y = (NSNumber*) dict[@"y"];
    
     CABTMIDICentralViewController* vc = [[CABTMIDICentralViewController alloc] init];
     UINavigationController* nc = [[UINavigationController alloc] initWithRootViewController:vc];
@@ -103,22 +100,26 @@
   }
 }
 
-- (void)embedPlugInView
+- (void) embedPlugInView
 {
 #if PLUG_HAS_UI
-  UIView* view = iplugViewController.view;
-#endif
+  UIView* view = pluginVC.view;
   view.frame = auView.bounds;
   [auView addSubview: view];
 
   view.translatesAutoresizingMaskIntoConstraints = NO;
 
-  NSArray *constraints = [NSLayoutConstraint constraintsWithVisualFormat: @"H:|[view]|" options:0 metrics:nil views:NSDictionaryOfVariableBindings(view)];
+  NSArray* constraints = [NSLayoutConstraint constraintsWithVisualFormat: @"H:|[view]|" options:0 metrics:nil views:NSDictionaryOfVariableBindings(view)];
   [auView addConstraints: constraints];
 
   constraints = [NSLayoutConstraint constraintsWithVisualFormat: @"V:|[view]|" options:0 metrics:nil views:NSDictionaryOfVariableBindings(view)];
   [auView addConstraints: constraints];
+#endif
 }
 
+- (UIRectEdge) preferredScreenEdgesDeferringSystemGestures
+{
+  return UIRectEdgeAll;
+}
 @end
 

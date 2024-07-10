@@ -15,6 +15,8 @@
 
 #if !defined DOXYGEN_SHOULD_SKIP_THIS
 
+  #include "IPlugPlatform.h"
+
   #if defined IGRAPHICS_GLES2
     #define IGRAPHICS_GL
     #if defined OS_IOS
@@ -44,25 +46,7 @@
     #endif
   #endif
 
-  #if defined IGRAPHICS_LICE
-    #include "IGraphicsLice.h"
-    #define IGRAPHICS_DRAW_CLASS_TYPE IGraphicsLice
-    #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-      #error When using IGRAPHICS_LICE, don't define IGRAPHICS_METAL or IGRAPHICS_GL*
-    #endif
-  #elif defined IGRAPHICS_AGG
-    #include "IGraphicsAGG.h"
-    #define IGRAPHICS_DRAW_CLASS_TYPE IGraphicsAGG
-    #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-      #error When using IGRAPHICS_AGG, don't define IGRAPHICS_METAL or IGRAPHICS_GL*
-    #endif
-  #elif defined IGRAPHICS_CAIRO
-    #include "IGraphicsCairo.h"
-    #define IGRAPHICS_DRAW_CLASS_TYPE IGraphicsCairo
-    #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-      #error When using IGRAPHICS_CAIRO, don't define IGRAPHICS_METAL or IGRAPHICS_GL*
-    #endif
-  #elif defined IGRAPHICS_NANOVG
+  #if defined IGRAPHICS_NANOVG
     #include "IGraphicsNanoVG.h"
     #define IGRAPHICS_DRAW_CLASS_TYPE IGraphicsNanoVG
   #elif defined IGRAPHICS_SKIA
@@ -85,6 +69,3 @@ using IGRAPHICS_DRAW_CLASS = IGRAPHICS_DRAW_CLASS_TYPE;
 END_IGRAPHICS_NAMESPACE
 END_IPLUG_NAMESPACE
 
-#if defined IGRAPHICS_IMGUI
-  #include "imgui.h"
-#endif

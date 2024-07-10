@@ -74,7 +74,7 @@ endif ()
 
 # Read libtool version info from configure.ac
 set(R "m4_define\\(\\[lt_([a-z]+)\\], ([0-9]+)\\)")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/configure.ac" CONFIGAC
+file(STRINGS "configure.ac" CONFIGAC
   REGEX ${R})
 foreach(_S ${CONFIGAC})
   string(REGEX REPLACE ${R} "\\1" k ${_S})
@@ -87,7 +87,7 @@ set(FULL_VER "${SO_current_minus_age}.${SO_revision}.${SO_age}")
 
 # Read package version info from configure.ac
 set(R "AC_INIT\\(RtAudio, ([0-9\\.]+),.*\\)")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/configure.ac" CONFIGAC
+file(STRINGS "configure.ac" CONFIGAC
   REGEX ${R})
 string(REGEX REPLACE ${R} "\\1" PACKAGE_VERSION ${CONFIGAC})
 
@@ -165,10 +165,10 @@ if (RTAUDIO_API_ASIO)
   set(NEED_WIN32LIBS ON)
   include_directories(include)
   list(APPEND rtaudio_SOURCES
-    include/asio.cpp
-    include/asiodrivers.cpp
-    include/asiolist.cpp
-    include/iasiothiscallresolver.cpp)
+          include/asio.cpp
+          include/asiodrivers.cpp
+          include/asiolist.cpp
+          include/iasiothiscallresolver.cpp)
   list(APPEND API_DEFS "-D__WINDOWS_ASIO__")
   list(APPEND API_LIST "asio")
 endif()
@@ -264,7 +264,7 @@ message(STATUS "Compiling with support for: ${apilist}")
 string(REPLACE ";" " " req "${PKGCONFIG_REQUIRES}")
 string(REPLACE ";" " " api "${API_DEFS}")
 set(prefix ${CMAKE_INSTALL_PREFIX})
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/rtaudio.pc.in" "rtaudio.pc" @ONLY)
+configure_file("rtaudio.pc.in" "rtaudio.pc" @ONLY)
 
 # Add install rule.
 install(TARGETS ${LIB_TARGETS}
@@ -302,7 +302,7 @@ install(EXPORT RtAudioTargets
 
 # Configure uninstall target.
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RtAudioConfigUninstall.cmake.in"
+    "cmake/RtAudioConfigUninstall.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/RtAudioConfigUninstall.cmake" @ONLY)
 
 # Create uninstall target.

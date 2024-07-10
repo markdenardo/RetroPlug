@@ -1,0 +1,123 @@
+cabal-version:        3.0
+name:                 haddock-library
+version:              1.11.0
+synopsis:             Library exposing some functionality of Haddock.
+description:          Haddock is a documentation-generation tool for Haskell
+                      libraries. These modules expose some
+                      functionality of it without pulling in the GHC
+                      dependency. Please note that the API is likely
+                      to change so be sure to specify upper bounds in
+                      your projects. For interacting with Haddock
+                      itself, see the [haddock package](https://hackage.haskell.org/package/haddock).
+
+license:              BSD-2-Clause
+license-file:         LICENSE
+maintainer:           Haddock Team
+homepage:             http://www.haskell.org/haddock/
+bug-reports:          https://gitlab.haskell.org/ghc/ghc/-/issues/new
+category:             Documentation
+
+extra-doc-files:
+  CHANGES.md
+
+extra-source-files:
+  fixtures/examples/*.input
+  fixtures/examples/*.parsed
+
+source-repository head
+  type: git
+  location: https://gitlab.haskell.org/ghc/ghc.git
+  subdir: utils/haddock/haddock-library
+
+common extensions
+  default-extensions:
+    NoStarIsType
+    StrictData
+
+  default-language:   Haskell2010
+
+common ghc-options
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wredundant-constraints
+    -fhide-source-paths -Wno-unused-do-bind -fshow-hole-constraints
+    -Wno-unticked-promoted-constructors -Werror=unused-imports
+    -fdicts-strict -Wunused-packages -funbox-strict-fields
+    -Wnoncanonical-monad-instances -Wmissing-home-modules
+
+  build-depends:
+    , base         >= 4.10     && < 4.21
+    , containers   ^>= 0.4.2.1 || ^>= 0.5.0.0 || ^>= 0.6.0.1 || ^>= 0.7
+    , text         ^>= 1.2.3.0 || ^>= 2.0 || ^>= 2.1
+    , parsec       ^>= 3.1.13.0
+
+library
+  import: extensions
+  import: ghc-options
+
+  hs-source-dirs:       src
+
+  exposed-modules:
+    Documentation.Haddock.Doc
+    Documentation.Haddock.Markup
+    Documentation.Haddock.Parser
+    Documentation.Haddock.Types
+
+  other-modules:
+    Documentation.Haddock.Parser.Util
+    Documentation.Haddock.Parser.Monad
+    Documentation.Haddock.Parser.Identifier
+
+test-suite spec
+  import: extensions
+  import: ghc-options
+  type:             exitcode-stdio-1.0
+  main-is:          Spec.hs
+  hs-source-dirs:
+    test
+    src
+
+  other-modules:
+    Documentation.Haddock.Doc
+    Documentation.Haddock.Markup
+    Documentation.Haddock.Parser
+    Documentation.Haddock.Parser.Monad
+    Documentation.Haddock.Parser.Util
+    Documentation.Haddock.Parser.UtilSpec
+    Documentation.Haddock.ParserSpec
+    Documentation.Haddock.Types
+    Documentation.Haddock.Parser.Identifier
+
+  build-depends:
+    , base-compat  >= 0.12.0 && <0.15.0
+    , QuickCheck   >= 2.11 && <2.16
+    , deepseq      >= 1.3.0.0 && <1.6.0.0
+
+  -- NB: build-depends & build-tool-depends have independent
+  --     install-plans, so it's best to limit to a single major
+  --     version of `hspec` & `hspec-discover` to ensure
+  --     intercompatibility
+  build-depends:
+    , hspec                          >= 2.4.4    && < 2.12
+
+  build-tool-depends:
+    , hspec-discover:hspec-discover  >= 2.4.4    && < 2.12
+
+test-suite fixtures
+  import: extensions
+  import: ghc-options
+  type:             exitcode-stdio-1.0
+  main-is:          Fixtures.hs
+  hs-source-dirs:   fixtures
+  build-depends:
+      -- intra-package dependency
+    , haddock-library
+      -- constraints inherited via lib:haddock-library component
+    , base
+
+      -- extra dependencies
+    , base-compat
+    , directory             ^>= 1.3.0.2
+    , filepath              >= 1.4 && <1.6
+    , optparse-applicative  >= 0.15 && < 0.19
+    , tree-diff             ^>= 0.2 || ^>= 0.3

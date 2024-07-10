@@ -1,5 +1,5 @@
 #include <windows.h>
-#include <stdio.h>
+#include "stdio.h"
 #include <winnls.h>
 #include <io.h>
 

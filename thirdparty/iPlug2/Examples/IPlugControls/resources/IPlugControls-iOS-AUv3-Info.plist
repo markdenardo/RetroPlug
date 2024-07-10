@@ -32,7 +32,7 @@
 					<key>description</key>
 					<string>IPlugControls</string>
 					<key>factoryFunction</key>
-					<string>IPlugAUViewController</string>
+					<string>IPlugAUViewController_vIPlugControls</string>
 					<key>manufacturer</key>
 					<string>Acme</string>
 					<key>name</key>
@@ -44,6 +44,7 @@
 					<key>tags</key>
 					<array>
 						<string>Synth</string>
+						<string>size:{1024,768}</string>
 					</array>
 					<key>type</key>
 					<string>aumu</string>

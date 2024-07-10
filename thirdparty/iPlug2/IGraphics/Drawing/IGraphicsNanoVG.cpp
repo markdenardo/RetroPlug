@@ -76,8 +76,8 @@ class IGraphicsNanoVG::Bitmap : public APIBitmap
 {
 public:
   Bitmap(NVGcontext* pContext, const char* path, double sourceScale, int nvgImageID, bool shared = false);
-  Bitmap(IGraphicsNanoVG* pGraphics, NVGcontext* pContext, int width, int height, int scale, float drawScale);
-  Bitmap(NVGcontext* pContext, int width, int height, const uint8_t* pData, int scale, float drawScale);
+  Bitmap(IGraphicsNanoVG* pGraphics, NVGcontext* pContext, int width, int height, float scale, float drawScale);
+  Bitmap(NVGcontext* pContext, int width, int height, const uint8_t* pData, float scale, float drawScale);
   virtual ~Bitmap();
   NVGframebuffer* GetFBO() const { return mFBO; }
 private:
@@ -99,8 +99,9 @@ IGraphicsNanoVG::Bitmap::Bitmap(NVGcontext* pContext, const char* path, double s
   SetBitmap(nvgImageID, w, h, sourceScale, 1.f);
 }
 
-IGraphicsNanoVG::Bitmap::Bitmap(IGraphicsNanoVG* pGraphics, NVGcontext* pContext, int width, int height, int scale, float drawScale)
+IGraphicsNanoVG::Bitmap::Bitmap(IGraphicsNanoVG* pGraphics, NVGcontext* pContext, int width, int height, float scale, float drawScale)
 {
+  assert(width > 0 && height > 0);
   mGraphics = pGraphics;
   mVG = pContext;
   mFBO = nvgCreateFramebuffer(pContext, width, height, 0);
@@ -120,7 +121,7 @@ IGraphicsNanoVG::Bitmap::Bitmap(IGraphicsNanoVG* pGraphics, NVGcontext* pContext
   SetBitmap(mFBO->image, width, height, scale, drawScale);
 }
 
-IGraphicsNanoVG::Bitmap::Bitmap(NVGcontext* pContext, int width, int height, const uint8_t* pData, int scale, float drawScale)
+IGraphicsNanoVG::Bitmap::Bitmap(NVGcontext* pContext, int width, int height, const uint8_t* pData, float scale, float drawScale)
 {
   int idx = nvgCreateImageRGBA(pContext, width, height, 0, pData);
   mVG = pContext;
@@ -227,7 +228,7 @@ END_IPLUG_NAMESPACE
 #pragma mark -
 
 IGraphicsNanoVG::IGraphicsNanoVG(IGEditorDelegate& dlg, int w, int h, int fps, float scale)
-: IGraphicsPathBase(dlg, w, h, fps, scale)
+: IGraphics(dlg, w, h, fps, scale)
 {
   DBGMSG("IGraphics NanoVG @ %i FPS\n", fps);
   StaticStorage<IFontData>::Accessor storage(sFontCache);
@@ -272,7 +273,7 @@ bool IGraphicsNanoVG::BitmapExtSupported(const char* ext)
 IBitmap IGraphicsNanoVG::LoadBitmap(const char* name, int nStates, bool framesAreHorizontal, int targetScale)
 {
   if (targetScale == 0)
-    targetScale = GetScreenScale();
+    targetScale = GetRoundedScreenScale();
 
   // NanoVG does not use the global static cache, since bitmaps are textures linked to a context
   StaticStorage<APIBitmap>::Accessor storage(mBitmapCache);
@@ -347,14 +348,36 @@ APIBitmap* IGraphicsNanoVG::LoadAPIBitmap(const char* fileNameOrResID, int scale
   return new Bitmap(mVG, fileNameOrResID, scale, idx, location == EResourceLocation::kPreloadedTexture);
 }
 
-APIBitmap* IGraphicsNanoVG::CreateAPIBitmap(int width, int height, int scale, double drawScale)
+APIBitmap* IGraphicsNanoVG::LoadAPIBitmap(const char* name, const void* pData, int dataSize, int scale)
+{
+  StaticStorage<APIBitmap>::Accessor storage(mBitmapCache);
+  APIBitmap* pBitmap = storage.Find(name, scale);
+
+  if (!pBitmap)
+  {
+    int idx = 0;
+    int nvgImageFlags = 0;
+
+    ActivateGLContext();
+    idx = idx = nvgCreateImageMem(mVG, nvgImageFlags, (unsigned char*)pData, dataSize);
+    DeactivateGLContext();
+
+    pBitmap = new Bitmap(mVG, name, scale, idx, false);
+
+    storage.Add(pBitmap, name, scale);
+  }
+
+  return pBitmap;
+}
+
+APIBitmap* IGraphicsNanoVG::CreateAPIBitmap(int width, int height, float scale, double drawScale, bool cacheable)
 {
   if (mInDraw)
   {
     nvgEndFrame(mVG);
   }
   
-  APIBitmap* pAPIBitmap =  new Bitmap(this, mVG, width, height, scale, drawScale);
+  APIBitmap* pAPIBitmap = new Bitmap(this, mVG, width, height, scale, drawScale);
 
   if (mInDraw)
   {
@@ -376,7 +399,7 @@ void IGraphicsNanoVG::GetLayerBitmapData(const ILayerPtr& layer, RawBitmapData& 
   {
     PushLayer(layer.get());
     nvgReadPixels(mVG, pBitmap->GetBitmap(), 0, 0, pBitmap->GetWidth(), pBitmap->GetHeight(), data.Get());
-    PopLayer();    
+    PopLayer();
   }
 }
 
@@ -457,6 +480,8 @@ void IGraphicsNanoVG::OnViewDestroyed()
 
 void IGraphicsNanoVG::DrawResize()
 {
+  ActivateGLContext();
+  
   if (mMainFrameBuffer != nullptr)
     nvgDeleteFramebuffer(mMainFrameBuffer);
   
@@ -467,6 +492,8 @@ void IGraphicsNanoVG::DrawResize()
     if (mMainFrameBuffer == nullptr)
       DBGMSG("Could not init FBO.\n");
   }
+  
+  DeactivateGLContext();
 }
 
 void IGraphicsNanoVG::BeginFrame()
@@ -474,9 +501,7 @@ void IGraphicsNanoVG::BeginFrame()
   mInDraw = true;
   IGraphics::BeginFrame(); // start perf graph timing
 
-#ifdef IGRAPHICS_METAL
-  //  mnvgClearWithColor(mVG, nvgRGBAf(0, 0, 0, 0));
-#else
+#ifdef IGRAPHICS_GL
     glViewport(0, 0, WindowWidth() * GetScreenScale(), WindowHeight() * GetScreenScale());
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -511,11 +536,6 @@ void IGraphicsNanoVG::EndFrame()
 #endif
 
   nvgEndFrame(mVG);
-
-#if defined IGRAPHICS_IMGUI && defined IGRAPHICS_GL
-  if(mImGuiRenderer)
-    mImGuiRenderer->NewFrame();
-#endif
   
   mInDraw = false;
   ClearFBOStack();
@@ -884,4 +904,93 @@ void IGraphicsNanoVG::ClearFBOStack()
     nvgDeleteFramebuffer(mFBOStack.top());
     mFBOStack.pop();
   }
+}
+
+void IGraphicsNanoVG::DrawFastDropShadow(const IRECT& innerBounds, const IRECT& outerBounds, float xyDrop, float roundness, float blur, IBlend* pBlend)
+{
+  NVGpaint shadowPaint = nvgBoxGradient(mVG, innerBounds.L + xyDrop, innerBounds.T + xyDrop, innerBounds.W(), innerBounds.H(), roundness, blur, NanoVGColor(COLOR_BLACK_DROP_SHADOW, pBlend), NanoVGColor(COLOR_TRANSPARENT, nullptr));
+  nvgBeginPath(mVG);
+  nvgRect(mVG, outerBounds.L, outerBounds.T, outerBounds.W(), outerBounds.H());
+  nvgFillPaint(mVG, shadowPaint);
+  nvgGlobalCompositeOperation(mVG, NVG_SOURCE_OVER);
+  nvgFill(mVG);
+  nvgBeginPath(mVG);
+}
+
+void IGraphicsNanoVG::DrawMultiLineText(const IText& text, const char* str, IRECT& bounds, const IBlend* pBlend)
+{
+  nvgSave(mVG);
+  nvgFontSize(mVG, text.mSize);
+  nvgFontFace(mVG, text.mFont);
+ 
+  float x = 0.0, y = 0.0;
+  const float width = bounds.W();
+  int align = 0;
+  float yOffsetScale = 0.0;
+  
+  switch (text.mAlign)
+  {
+    case EAlign::Near:     align = NVG_ALIGN_LEFT;     x = bounds.L;        break;
+    case EAlign::Center:   align = NVG_ALIGN_CENTER;   x = bounds.MW();     break;
+    case EAlign::Far:      align = NVG_ALIGN_RIGHT;    x = bounds.R;        break;
+  }
+    
+  switch (text.mVAlign)
+  {
+    case EVAlign::Top:
+    {
+      align |= NVG_ALIGN_TOP;
+      y = bounds.T;
+      yOffsetScale = 0.0;
+      break;
+    }
+    case EVAlign::Middle:
+    {
+      align |= NVG_ALIGN_MIDDLE;
+      y = bounds.MH();
+      yOffsetScale = 0.5;
+      break;
+    }
+    case EVAlign::Bottom:
+    {
+      align |= NVG_ALIGN_BOTTOM;
+      y = bounds.B;
+      yOffsetScale = 1.0;
+      break;
+    }
+  }
+  
+  nvgTextAlign(mVG, align);
+  
+  NVGtextRow rows[3];
+  const char* start;
+  const char* end;
+  int nRows = 0;
+  int lines = 0;
+  float lineHeight;
+  nvgTextMetrics(mVG, NULL, NULL, &lineHeight);
+  nvgFillColor(mVG, NanoVGColor(text.mFGColor, pBlend));
+
+  for (auto run : {0, 1})
+  {
+    start = str;
+    end = str + strlen(str);
+    while ((nRows = nvgTextBreakLines(mVG, start, end, width, rows, 3))) {
+      for (int i = 0; i < nRows; i++) {
+        if (run == 0)
+        {
+          lines++;
+        }
+        else
+        {
+          NVGtextRow* row = &rows[i];
+          nvgText(mVG, x, y - ((lines*lineHeight)*yOffsetScale), row->start, row->end);
+          y += lineHeight;
+        }
+      }
+      start = rows[nRows-1].next;
+    }
+  }
+  
+  nvgRestore(mVG);
 }

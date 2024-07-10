@@ -5,9 +5,9 @@
 #import "JOYFullReportElement.h"
 #import "JOYButton.h"
 #import "JOYEmulatedButton.h"
-#include <IOKit/hid/IOHIDLib.h>
+#import <IOKit/hid/IOHIDLib.h>
 
-#include <AppKit/AppKit.h>
+#import <AppKit/AppKit.h>
 extern NSTextField *globalDebugField;
 
 #define PWM_RESOLUTION 16
@@ -367,7 +367,7 @@ typedef union {
                 if (!other) goto single;
                 if (other.usage >= element.usage) goto single;
                 if (other.reportID != element.reportID) goto single;
-                if (![axisGroups[@(other.usage)] isEqualTo: axisGroups[@(element.usage)]]) goto single;
+                if (![axisGroups[@(other.usage)] isEqual: axisGroups[@(element.usage)]]) goto single;
                 if (other.parentID != element.parentID) goto single;
                 
                 JOYAxes2D *axes = nil;
@@ -587,8 +587,8 @@ typedef union {
     }
     
     if (_isSwitch) {
-        [self sendReport:[NSData dataWithBytes:(uint8_t[]){0x80, 0x04} length:2]];
-        [self sendReport:[NSData dataWithBytes:(uint8_t[]){0x80, 0x02} length:2]];
+        [self sendReport:[NSData dataWithBytes:inline_const(uint8_t[], {0x80, 0x04}) length:2]];
+        [self sendReport:[NSData dataWithBytes:inline_const(uint8_t[], {0x80, 0x02}) length:2]];
         
         _lastVendorSpecificOutput.switchPacket.reportID = 0x1; // Rumble and LEDs
         _lastVendorSpecificOutput.switchPacket.sequence++;
@@ -1199,7 +1199,7 @@ typedef union {
 
 + (void)load
 {
-#include "ControllerConfiguration.inc"
+#import "ControllerConfiguration.inc"
 }
 
 +(void)registerListener:(id<JOYListener>)listener

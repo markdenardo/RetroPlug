@@ -1,7 +1,4 @@
-#ifndef GBButtons_h
-#define GBButtons_h
-
-typedef enum : NSUInteger {
+typedef enum {
     GBRight,
     GBLeft,
     GBUp,
@@ -37,5 +34,3 @@ static inline NSString *button_to_preference_name(GBButton button, unsigned play
     }
     return [NSString stringWithFormat:@"GB%@", GBButtonNames[button]];
 }
-
-#endif

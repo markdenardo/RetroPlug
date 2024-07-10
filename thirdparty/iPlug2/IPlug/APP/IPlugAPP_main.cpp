@@ -8,14 +8,15 @@
  ==============================================================================
 */
 
+#include <memory>
 #include "wdltypes.h"
 #include "wdlstring.h"
 
 #include "IPlugPlatform.h"
 #include "IPlugAPP_host.h"
 
-#include "config.h"
-#include "resource.h"
+#include "../../../../config/config.h"
+#include "../../../../resources/resource.h"
 
 using namespace iplug;
 
@@ -30,10 +31,6 @@ HWND gHWND;
 extern HINSTANCE gHINSTANCE;
 UINT gScrollMessage;
 
-int main() {
-  return WinMain(GetModuleHandle(0), NULL, NULL, 0);
-}
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdParam, int nShowCmd)
 {
   try
@@ -47,7 +44,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
     {
       HWND hWnd = FindWindow(0, BUNDLE_NAME);
       SetForegroundWindow(hWnd);
-      return 0; // should return 1?
+      return 0;
     }
 #endif
     gHINSTANCE = hInstance;
@@ -63,8 +60,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
 
     static UINT(WINAPI *__SetProcessDpiAwarenessContext)(DPI_AWARENESS_CONTEXT);
 
-    double scale = 1.;
-
     if (!__SetProcessDpiAwarenessContext)
     {
       HINSTANCE h = LoadLibrary("user32.dll");
@@ -79,7 +74,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
 
     CreateDialog(gHINSTANCE, MAKEINTRESOURCE(IDD_DIALOG_MAIN), GetDesktopWindow(), IPlugAPPHost::MainDlgProc);
 
-#ifndef _DEBUG
+#if !defined _DEBUG || defined NO_IGRAPHICS
     HMENU menu = GetMenu(gHWND);
     RemoveMenu(menu, 1, MF_BYPOSITION);
     DrawMenuBar(gHWND);
@@ -138,9 +133,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
     ReleaseMutex(hMutex);
 #endif
   }
-  catch(...)
+  catch(std::exception e)
   {
-    DBGMSG("another instance running\n");
+    DBGMSG("Exception: %s", e.what());
+    return 1;
   }
   return 0;
 }
@@ -159,7 +155,7 @@ int main(int argc, char *argv[])
   //if invoked with an argument registerauv3 use plug-in kit to explicitly register auv3 app extension (doesn't happen from debugger)
   if(strcmp(argv[2], "registerauv3"))
   {
-    WDL_String appexPath(argv[0]);
+    WDL_String appexPath;
     appexPath.SetFormatted(1024, "pluginkit -a %s%s%s.appex", argv[0], "/../../Plugins/", appexPath.get_filepart());
     if(system(appexPath.Get()) > -1)
       NSLog(@"Registered audiounit app extension\n");
@@ -229,7 +225,7 @@ INT_PTR SWELLAppMain(int msg, INT_PTR parm1, INT_PTR parm2)
 
         DeleteMenu(menu, 1, MF_BYPOSITION); // delete file menu
       }
-#ifndef _DEBUG
+#if !defined _DEBUG || defined NO_IGRAPHICS
       if (menu)
       {
         HMENU sm = GetSubMenu(menu, 1);
@@ -297,7 +293,7 @@ INT_PTR SWELLAppMain(int msg, INT_PTR parm1, INT_PTR parm2)
 #define CBS_HASSTRINGS 0
 #define SWELL_DLG_SCALE_AUTOGEN 1
 #define SET_IDD_DIALOG_PREF_SCALE 1.5
-#if APP_RESIZABLE
+#if PLUG_HOST_RESIZE
 #define SWELL_DLG_FLAGS_AUTOGEN SWELL_DLG_WS_FLIPPED|SWELL_DLG_WS_RESIZABLE
 #endif
 #include "swell-dlggen.h"

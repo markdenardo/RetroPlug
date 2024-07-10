@@ -13,12 +13,6 @@
 #include "gb.h"
 
 
-#ifdef GB_DISABLE_REWIND
-#define GB_rewind_free(...)
-#define GB_rewind_push(...)
-#endif
-
-
 void GB_attributed_logv(GB_gameboy_t *gb, GB_log_attributes attributes, const char *fmt, va_list args)
 {
     char *string = NULL;
@@ -76,7 +70,7 @@ static char *default_input_callback(GB_gameboy_t *gb)
     }
     
     if (expression[0] == '\x03') {
-        gb->debug_stopped = true;
+        GB_debugger_break(gb);
         free(expression);
         return strdup("");
     }
@@ -177,11 +171,14 @@ GB_gameboy_t *GB_init(GB_gameboy_t *gb, GB_model_t model)
 #endif
     gb->cartridge_type = &GB_cart_defs[0]; // Default cartridge type
     gb->clock_multiplier = 1.0;
+    gb->apu_output.max_cycles_per_sample = 0x400;
     
     if (model & GB_MODEL_NO_SFC_BIT) {
         /* Disable time syncing. Timing should be done by the SFC emulator. */
         gb->turbo = true;
     }
+    
+    gb->data_bus_decay = 12;
     
     GB_reset(gb);
     load_default_border(gb);
@@ -195,6 +192,7 @@ GB_model_t GB_get_model(GB_gameboy_t *gb)
 
 void GB_free(GB_gameboy_t *gb)
 {
+    GB_ASSERT_NOT_RUNNING(gb)
     gb->magic = 0;
     if (gb->ram) {
         free(gb->ram);
@@ -208,11 +206,16 @@ void GB_free(GB_gameboy_t *gb)
     if (gb->rom) {
         free(gb->rom);
     }
+    if (gb->sgb) {
+        free(gb->sgb);
+    }
+#ifndef GB_DISABLE_DEBUGGER
+    GB_debugger_clear_symbols(gb);
     if (gb->breakpoints) {
         free(gb->breakpoints);
     }
-    if (gb->sgb) {
-        free(gb->sgb);
+    if (gb->watchpoints) {
+        free(gb->watchpoints);
     }
     if (gb->nontrivial_jump_state) {
         free(gb->nontrivial_jump_state);
@@ -220,10 +223,8 @@ void GB_free(GB_gameboy_t *gb)
     if (gb->undo_state) {
         free(gb->undo_state);
     }
-#ifndef GB_DISABLE_DEBUGGER
-    GB_debugger_clear_symbols(gb);
 #endif
-    GB_rewind_free(gb);
+    GB_rewind_reset(gb);
 #ifndef GB_DISABLE_CHEATS
     while (gb->cheats) {
         GB_remove_cheat(gb, gb->cheats[0]);
@@ -302,24 +303,32 @@ void GB_borrow_sgb_border(GB_gameboy_t *gb)
     GB_free(&sgb);
 }
 
+static size_t rounded_rom_size(size_t size)
+{
+    size = (size + 0x3FFF) & ~0x3FFF; /* Round to bank */
+    /* And then round to a power of two */
+    while (size & (size - 1)) {
+        /* I promise this works. */
+        size |= size >> 1;
+        size++;
+    }
+    if (size < 0x8000) {
+        size = 0x8000;
+    }
+    return size;
+}
+
 int GB_load_rom(GB_gameboy_t *gb, const char *path)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     FILE *f = fopen(path, "rb");
     if (!f) {
         GB_log(gb, "Could not open ROM: %s.\n", strerror(errno));
         return errno;
     }
     fseek(f, 0, SEEK_END);
-    gb->rom_size = (ftell(f) + 0x3FFF) & ~0x3FFF; /* Round to bank */
-    /* And then round to a power of two */
-    while (gb->rom_size & (gb->rom_size - 1)) {
-        /* I promise this works. */
-        gb->rom_size |= gb->rom_size >> 1;
-        gb->rom_size++;
-    }
-    if (gb->rom_size < 0x8000) {
-        gb->rom_size = 0x8000;
-    }
+    gb->rom_size = rounded_rom_size(ftell(f));
     fseek(f, 0, SEEK_SET);
     if (gb->rom) {
         free(gb->rom);
@@ -397,13 +406,18 @@ void GB_gbs_switch_track(GB_gameboy_t *gb, uint8_t track)
         gb->sgb->intro_animation = GB_SGB_INTRO_ANIMATION_LENGTH;
         gb->sgb->disable_commands = true;
     }
-    if (gb->gbs_header.TAC & 0x40) {
-        gb->interrupt_enable = true;
+    if (gb->gbs_header.TAC & 0x4) {
+        gb->interrupt_enable = 4;
+    }
+    else {
+        gb->interrupt_enable = 1;
     }
 }
 
 int GB_load_gbs_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t size, GB_gbs_info_t *info)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     if (size < sizeof(gb->gbs_header)) {
         GB_log(gb, "Not a valid GBS file.\n");
         return -1;
@@ -421,18 +435,8 @@ int GB_load_gbs_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t size
 
     size_t data_size = size - sizeof(gb->gbs_header);
 
-    gb->rom_size = (data_size + LE16(gb->gbs_header.load_address) + 0x3FFF) & ~0x3FFF; /* Round to bank */
-    /* And then round to a power of two */
-    while (gb->rom_size & (gb->rom_size - 1)) {
-        /* I promise this works. */
-        gb->rom_size |= gb->rom_size >> 1;
-        gb->rom_size++;
-    }
+    gb->rom_size = rounded_rom_size(data_size + LE16(gb->gbs_header.load_address));
     
-    if (gb->rom_size < 0x8000) {
-        gb->rom_size = 0x8000;
-    }
-
     if (gb->rom) {
         free(gb->rom);
     }
@@ -490,6 +494,8 @@ int GB_load_gbs_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t size
 
 int GB_load_gbs(GB_gameboy_t *gb, const char *path, GB_gbs_info_t *info)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     FILE *f = fopen(path, "rb");
     if (!f) {
         GB_log(gb, "Could not open GBS: %s.\n", strerror(errno));
@@ -509,6 +515,8 @@ int GB_load_gbs(GB_gameboy_t *gb, const char *path, GB_gbs_info_t *info)
 
 int GB_load_isx(GB_gameboy_t *gb, const char *path)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     FILE *f = fopen(path, "rb");
     if (!f) {
         GB_log(gb, "Could not open ISX file: %s.\n", strerror(errno));
@@ -542,7 +550,10 @@ int GB_load_isx(GB_gameboy_t *gb, const char *path)
                 bank = byte;
                 if (byte >= 0x80) {
                     READ(byte);
-                    bank |= byte << 8;
+                    /* TODO: This is just a guess, the docs don't elaborate on how banks > 0xFF are saved,
+                       other than the fact that banks >= 80 requires two bytes to store them, and I haven't
+                       encountered an ISX file for a ROM larger than 4MBs yet. */
+                    bank += byte << 7;
                 }
                 
                 READ(address);
@@ -594,9 +605,8 @@ int GB_load_isx(GB_gameboy_t *gb, const char *path)
                 uint8_t length;
                 char name[257];
                 uint8_t flag;
-                uint16_t bank;
+                uint8_t bank;
                 uint16_t address;
-                uint8_t byte;
                 READ(count);
                 count = LE16(count);
                 while (count--) {
@@ -605,12 +615,7 @@ int GB_load_isx(GB_gameboy_t *gb, const char *path)
                     name[length] = 0;
                     READ(flag); // unused
                     
-                    READ(byte);
-                    bank = byte;
-                    if (byte >= 0x80) {
-                        READ(byte);
-                        bank |= byte << 8;
-                    }
+                    READ(bank);
                     
                     READ(address);
                     address = LE16(address);
@@ -725,14 +730,9 @@ error:
 
 void GB_load_rom_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t size)
 {
-    gb->rom_size = (size + 0x3FFF) & ~0x3FFF;
-    while (gb->rom_size & (gb->rom_size - 1)) {
-        gb->rom_size |= gb->rom_size >> 1;
-        gb->rom_size++;
-    }
-    if (gb->rom_size == 0) {
-        gb->rom_size = 0x8000;
-    }
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
+    gb->rom_size = rounded_rom_size(size);
     if (gb->rom) {
         free(gb->rom);
     }
@@ -866,6 +866,8 @@ int GB_save_battery_to_buffer(GB_gameboy_t *gb, uint8_t *buffer, size_t size)
 
 int GB_save_battery(GB_gameboy_t *gb, const char *path)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+
     if (!gb->cartridge_type->has_battery) return 0; // Nothing to save.
     if (gb->cartridge_type->mbc_type == GB_TPP1 && !(gb->rom[0x153] & 8)) return 0; // Nothing to save.
     if (gb->mbc_ram_size == 0 && !gb->cartridge_type->has_rtc) return 0; /* Claims to have battery, but has no RAM or RTC */
@@ -938,6 +940,8 @@ static void load_tpp1_save_data(GB_gameboy_t *gb, const tpp1_rtc_save_t *data)
 
 void GB_load_battery_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t size)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     memcpy(gb->mbc_ram, buffer, MIN(gb->mbc_ram_size, size));
     if (size <= gb->mbc_ram_size) {
         goto reset_rtc;
@@ -1028,7 +1032,9 @@ void GB_load_battery_from_buffer(GB_gameboy_t *gb, const uint8_t *buffer, size_t
                                             really RTC data. */
         goto reset_rtc;
     }
+    GB_rtc_set_time(gb, time(NULL));
     goto exit;
+    
 reset_rtc:
     gb->last_rtc_second = time(NULL);
     gb->rtc_real.high |= 0x80; /* This gives the game a hint that the clock should be reset. */
@@ -1044,6 +1050,8 @@ exit:
 /* Loading will silently stop if the format is incomplete */
 void GB_load_battery(GB_gameboy_t *gb, const char *path)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
+    
     FILE *f = fopen(path, "rb");
     if (!f) {
         return;
@@ -1136,7 +1144,9 @@ void GB_load_battery(GB_gameboy_t *gb, const char *path)
                                             really RTC data. */
         goto reset_rtc;
     }
+    GB_rtc_set_time(gb, time(NULL));
     goto exit;
+    
 reset_rtc:
     gb->last_rtc_second = time(NULL);
     gb->rtc_real.high |= 0x80; /* This gives the game a hint that the clock should be reset. */
@@ -1152,26 +1162,34 @@ exit:
 
 unsigned GB_run(GB_gameboy_t *gb)
 {
+    GB_ASSERT_NOT_RUNNING(gb)
     gb->vblank_just_occured = false;
 
-    if (gb->sgb && gb->sgb->intro_animation < 96) {
+    if (unlikely(gb->sgb && gb->sgb->intro_animation < 96)) {
         /* On the SGB, the GB is halted after finishing the boot ROM.
            Then, after the boot animation is almost done, it's reset.
            Since the SGB HLE does not perform any header validity checks,
            we just halt the CPU (with hacky code) until the correct time.
            This ensures the Nintendo logo doesn't flash on screen, and
            the game does "run in background" while the animation is playing. */
+        
+        GB_set_running_thread(gb);
         GB_display_run(gb, 228, true);
+        GB_clear_running_thread(gb);
         gb->cycles_since_last_sync += 228;
         return 228;
     }
     
     GB_debugger_run(gb);
     gb->cycles_since_run = 0;
+    GB_set_running_thread(gb);
     GB_cpu_run(gb);
-    if (gb->vblank_just_occured) {
+    GB_clear_running_thread(gb);
+    if (unlikely(gb->vblank_just_occured)) {
         GB_debugger_handle_async_commands(gb);
+        GB_set_running_thread(gb);
         GB_rewind_push(gb);
+        GB_clear_running_thread(gb);
     }
     if (!(gb->io_registers[GB_IO_IF] & 0x10) && (gb->io_registers[GB_IO_JOYP] & 0x30) != 0x30) {
         gb->joyp_accessed = true;
@@ -1201,6 +1219,7 @@ uint64_t GB_run_frame(GB_gameboy_t *gb)
 
 void GB_set_pixels_output(GB_gameboy_t *gb, uint32_t *output)
 {
+    GB_ASSERT_NOT_RUNNING_OTHER_THREAD(gb)
     gb->screen = output;
 }
 
@@ -1234,6 +1253,11 @@ void GB_set_async_input_callback(GB_gameboy_t *gb, GB_input_callback_t callback)
 #ifndef GB_DISABLE_DEBUGGER
     gb->async_input_callback = callback;
 #endif
+}
+
+void GB_set_debugger_reload_callback(GB_gameboy_t *gb, GB_debugger_reload_callback_t callback)
+{
+    gb->debugger_reload_callback = callback;
 }
 
 void GB_set_execution_callback(GB_gameboy_t *gb, GB_execution_callback_t callback)
@@ -1367,13 +1391,17 @@ void GB_disconnect_serial(GB_gameboy_t *gb)
     gb->serial_transfer_bit_end_callback = NULL;
     
     /* Reset any internally-emulated device. */
-    memset(&gb->printer, 0, sizeof(gb->printer));
-    memset(&gb->workboy, 0, sizeof(gb->workboy));
+    memset(GB_GET_SECTION(gb, accessory), 0, GB_SECTION_SIZE(accessory));
+}
+
+GB_accessory_t GB_get_built_in_accessory(GB_gameboy_t *gb)
+{
+    return gb->accessory;
 }
 
 bool GB_is_inited(GB_gameboy_t *gb)
 {
-    return gb->magic == state_magic();
+    return gb->magic == GB_state_magic();
 }
 
 bool GB_is_cgb(const GB_gameboy_t *gb)
@@ -1489,7 +1517,7 @@ static void reset_ram(GB_gameboy_t *gb)
         case GB_MODEL_CGB_E:
         case GB_MODEL_AGB_A:
         case GB_MODEL_GBP_A:
-            for (unsigned i = 0; i < sizeof(gb->hram); i++) {
+            nounroll for (unsigned i = 0; i < sizeof(gb->hram); i++) {
                 gb->hram[i] = GB_random();
             }
             break;
@@ -1502,7 +1530,7 @@ static void reset_ram(GB_gameboy_t *gb)
         case GB_MODEL_SGB_PAL_NO_SFC: /* Unverified */
         case GB_MODEL_SGB2:
         case GB_MODEL_SGB2_NO_SFC:
-            for (unsigned i = 0; i < sizeof(gb->hram); i++) {
+            nounroll for (unsigned i = 0; i < sizeof(gb->hram); i++) {
                 if (i & 1) {
                     gb->hram[i] = GB_random() | GB_random() | GB_random();
                 }
@@ -1542,7 +1570,7 @@ static void reset_ram(GB_gameboy_t *gb)
                     gb->oam[i] = GB_random() | GB_random() | GB_random();
                 }
             }
-            for (unsigned i = 8; i < sizeof(gb->oam); i++) {
+            nounroll for (unsigned i = 8; i < sizeof(gb->oam); i++) {
                 gb->oam[i] = gb->oam[i - 8];
             }
             break;
@@ -1561,7 +1589,7 @@ static void reset_ram(GB_gameboy_t *gb)
             /* Initialized by CGB-A and newer, 0s in CGB-0 */
             break;
         case GB_MODEL_MGB: {
-            for (unsigned i = 0; i < GB_IO_WAV_END - GB_IO_WAV_START; i++) {
+            nounroll for (unsigned i = 0; i < GB_IO_WAV_END - GB_IO_WAV_START; i++) {
                 if (i & 1) {
                     gb->io_registers[GB_IO_WAV_START + i] = GB_random() & GB_random();
                 }
@@ -1578,7 +1606,7 @@ static void reset_ram(GB_gameboy_t *gb)
         case GB_MODEL_SGB_PAL_NO_SFC: /* Unverified */
         case GB_MODEL_SGB2:
         case GB_MODEL_SGB2_NO_SFC: {
-            for (unsigned i = 0; i < GB_IO_WAV_END - GB_IO_WAV_START; i++) {
+            nounroll for (unsigned i = 0; i < GB_IO_WAV_END - GB_IO_WAV_START; i++) {
                 if (i & 1) {
                     gb->io_registers[GB_IO_WAV_START + i] = GB_random() & GB_random() & GB_random();
                 }
@@ -1638,8 +1666,10 @@ static void request_boot_rom(GB_gameboy_t *gb)
             case GB_MODEL_CGB_B:
             case GB_MODEL_CGB_C:
             case GB_MODEL_CGB_D:
-            case GB_MODEL_CGB_E:
                 type = GB_BOOT_ROM_CGB;
+                break;
+            case GB_MODEL_CGB_E:
+                type = GB_BOOT_ROM_CGB_E;
                 break;
             case GB_MODEL_AGB_A:
             case GB_MODEL_GBP_A:
@@ -1678,7 +1708,7 @@ static void GB_reset_internal(GB_gameboy_t *gb, bool quick)
     GB_update_clock_rate(gb);
     uint8_t rtc_section[GB_SECTION_SIZE(rtc)];
     memcpy(rtc_section, GB_GET_SECTION(gb, rtc), sizeof(rtc_section));
-    memset(gb, 0, (size_t)GB_GET_SECTION((GB_gameboy_t *) 0, unsaved));
+    memset(gb, 0, GB_SECTION_OFFSET(unsaved));
     memcpy(GB_GET_SECTION(gb, rtc), rtc_section, sizeof(rtc_section));
     gb->model = model;
     gb->version = GB_STRUCT_VERSION;
@@ -1732,11 +1762,15 @@ static void GB_reset_internal(GB_gameboy_t *gb, bool quick)
     }
     
     GB_set_internal_div_counter(gb, 8);
+    /* TODO: AGS-101 is inverted in comparison to AGS-001 and AGB */
+    gb->is_odd_frame = gb->model > GB_MODEL_CGB_E;
 
+#ifndef GB_DISABLE_DEBUGGER
     if (gb->nontrivial_jump_state) {
         free(gb->nontrivial_jump_state);
         gb->nontrivial_jump_state = NULL;
     }
+#endif
     
     if (!quick) {
         reset_ram(gb);
@@ -1754,23 +1788,28 @@ static void GB_reset_internal(GB_gameboy_t *gb, bool quick)
         gb->io_registers[GB_IO_OBP0] = preserved_state->obp0;
         gb->io_registers[GB_IO_OBP1] = preserved_state->obp1;
     }
+    gb->apu.apu_cycles_in_2mhz = true;
     
-    gb->magic = state_magic();
+    gb->magic = GB_state_magic();
     request_boot_rom(gb);
+    GB_rewind_push(gb);
 }
 
 void GB_reset(GB_gameboy_t *gb)
 {
+    GB_ASSERT_NOT_RUNNING(gb)
     GB_reset_internal(gb, false);
 }
 
 void GB_quick_reset(GB_gameboy_t *gb)
 {
+    GB_ASSERT_NOT_RUNNING(gb)
     GB_reset_internal(gb, true);
 }
 
 void GB_switch_model_and_reset(GB_gameboy_t *gb, GB_model_t model)
 {
+    GB_ASSERT_NOT_RUNNING(gb)
     gb->model = model;
     if (GB_is_cgb(gb)) {
         gb->ram = realloc(gb->ram, gb->ram_size = 0x1000 * 8);
@@ -1780,11 +1819,13 @@ void GB_switch_model_and_reset(GB_gameboy_t *gb, GB_model_t model)
         gb->ram = realloc(gb->ram, gb->ram_size = 0x2000);
         gb->vram = realloc(gb->vram, gb->vram_size = 0x2000);
     }
+#ifndef GB_DISABLE_DEBUGGER
     if (gb->undo_state) {
         free(gb->undo_state);
         gb->undo_state = NULL;
     }
-    GB_rewind_free(gb);
+#endif
+    GB_rewind_reset(gb);
     GB_reset(gb);
     load_default_border(gb);
 }
@@ -1866,8 +1907,10 @@ GB_registers_t *GB_get_registers(GB_gameboy_t *gb)
 
 void GB_set_clock_multiplier(GB_gameboy_t *gb, double multiplier)
 {
-    gb->clock_multiplier = multiplier;
-    GB_update_clock_rate(gb);
+    if (multiplier != gb->clock_multiplier) {
+        gb->clock_multiplier = multiplier;
+        GB_update_clock_rate(gb);
+    }
 }
 
 uint32_t GB_get_clock_rate(GB_gameboy_t *gb)
@@ -1893,6 +1936,7 @@ void GB_update_clock_rate(GB_gameboy_t *gb)
     }
     
     gb->clock_rate = gb->unmultiplied_clock_rate * gb->clock_multiplier;
+    GB_set_sample_rate(gb, gb->apu_output.sample_rate);
 }
 
 void GB_set_border_mode(GB_gameboy_t *gb, GB_border_mode_t border_mode)
@@ -1980,6 +2024,11 @@ unsigned GB_time_to_alarm(GB_gameboy_t *gb)
     return alarm_time - current_time;
 }
 
+bool GB_rom_supports_alarms(GB_gameboy_t *gb)
+{
+    return gb->cartridge_type->mbc_type == GB_HUC3;
+}
+
 bool GB_has_accelerometer(GB_gameboy_t *gb)
 {
     return gb->cartridge_type->mbc_type == GB_MBC7;
@@ -1989,6 +2038,11 @@ void GB_set_accelerometer_values(GB_gameboy_t *gb, double x, double y)
 {
     gb->accelerometer_x = x;
     gb->accelerometer_y = y;
+}
+
+void GB_set_open_bus_decay_time(GB_gameboy_t *gb, uint32_t decay)
+{
+    gb->data_bus_decay = decay;
 }
 
 void GB_get_rom_title(GB_gameboy_t *gb, char *title)
@@ -2058,3 +2112,24 @@ uint32_t GB_get_rom_crc32(GB_gameboy_t *gb)
     }
     return ~ret;
 }
+
+
+#ifdef GB_CONTEXT_SAFETY
+void *GB_get_thread_id(void)
+{
+    // POSIX requires errno to be thread local, making errno's address unique per thread
+    return &errno;
+}
+
+void GB_set_running_thread(GB_gameboy_t *gb)
+{
+    GB_ASSERT_NOT_RUNNING(gb)
+    gb->running_thread_id = GB_get_thread_id();
+}
+
+void GB_clear_running_thread(GB_gameboy_t *gb)
+{
+    assert(gb->running_thread_id == GB_get_thread_id());
+    gb->running_thread_id = NULL;
+}
+#endif

@@ -70,13 +70,51 @@ PlatformFontPtr CoreTextHelpers::LoadPlatformFont(const char* fontID, const char
   
   CFLocal<CFDictionaryRef> dictionary(CFDictionaryCreate(NULL, (const void**)&keys, (const void**)&values, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
   CFLocal<CTFontDescriptorRef> descriptor(CTFontDescriptorCreateWithAttributes(dictionary.Get()));
-  CFLocal<CFURLRef> url((CFURLRef) CTFontDescriptorCopyAttribute(descriptor.Get(), kCTFontURLAttribute));
-  CFLocal<CGDataProviderRef> provider(url.Get() ? CGDataProviderCreateWithURL(url.Get()) : nullptr);
+  CFLocal<CFSetRef> keysAsSet(CFSetCreate(NULL, (const void**)&keys, 2, &kCFTypeSetCallBacks));
+  CFLocal<CFArrayRef> matched(CTFontDescriptorCreateMatchingFontDescriptors(descriptor.Get(), keysAsSet.Get()));
+  
+  for (int i = 0; i < CFArrayGetCount(matched.Get()); i++)
+  {
+    // Loop until we get a font which provides data
+    
+    CTFontDescriptorRef testDescriptor = (CTFontDescriptorRef) CFArrayGetValueAtIndex(matched.Get(), i);
+    CFLocal<CFURLRef> url((CFURLRef) CTFontDescriptorCopyAttribute(testDescriptor, kCTFontURLAttribute));
+    CFLocal<CGDataProviderRef> provider(url.Get() ? CGDataProviderCreateWithURL(url.Get()) : nullptr);
+    
+    if (provider.Get())
+    {
+      CFRetain(testDescriptor);
+      return PlatformFontPtr(new CoreTextFont(testDescriptor, provider.Release(), TextStyleString(style), true));
+    }
+  }
+        
+  return nullptr;
+}
+
+void releaseFontData(void* info, const void* data, size_t size)
+{
+  uint8_t* pData = (uint8_t*)data;
+  delete[] pData;
+}
+
+PlatformFontPtr CoreTextHelpers::LoadPlatformFont(const char* fontID, void* pData, int dataSize)
+{
+  uint8_t* dataCopy = new uint8_t[dataSize];
+  memcpy((void*)dataCopy, pData, dataSize);
+
+  CFLocal<CGDataProviderRef> provider(CGDataProviderCreateWithData(nullptr, dataCopy, (size_t)dataSize, &releaseFontData));
   
   if (!provider.Get())
     return nullptr;
   
-  return PlatformFontPtr(new CoreTextFont(descriptor.Release(), provider.Release(), TextStyleString(style), true));
+  CFLocal<CGFontRef> cgFont(CGFontCreateWithDataProvider(provider.Get()));
+  CFLocal<CTFontRef> ctFont(CTFontCreateWithGraphicsFont(cgFont.Get(), 0.f, NULL, NULL));
+  CFLocal<CTFontDescriptorRef> descriptor(CTFontCopyFontDescriptor(ctFont.Get()));
+  
+  if (!descriptor.Get())
+    return nullptr;
+  
+  return PlatformFontPtr(new CoreTextFont(descriptor.Release(), provider.Release(), "", false));
 }
 
 void CoreTextHelpers::CachePlatformFont(const char* fontID, const PlatformFontPtr& font, StaticStorage<CoreTextFontDescriptor>& cache)

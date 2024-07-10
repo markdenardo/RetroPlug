@@ -1,5 +1,4 @@
-#ifndef font_h
-#define font_h
+#pragma once
 
 #include <stdint.h>
 extern uint8_t font[];
@@ -18,5 +17,5 @@ extern const uint8_t font_max;
 #define SLIDER_STRING "\x89\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8F\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8A\x8B"
 #define SELECTED_SLIDER_STRING "\x8C\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8D\x8E"
 #define COPYRIGHT_STRING "\x90"
-#endif /* font_h */
-
+#define CHECKBOX_OFF_STRING "\x93"
+#define CHECKBOX_ON_STRING "\x94"

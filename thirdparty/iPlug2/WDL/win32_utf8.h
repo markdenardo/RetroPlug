@@ -16,6 +16,9 @@ extern "C" {
 #include <sys/stat.h>
 #include <stdio.h>
 
+#define LB_GETTEXTUTF8 (LB_GETTEXT|0x8000)
+#define LB_GETTEXTLENUTF8 (LB_GETTEXTLEN|0x8000)
+
 WDL_WIN32_UTF8_IMPL BOOL SetWindowTextUTF8(HWND hwnd, LPCTSTR str);
 WDL_WIN32_UTF8_IMPL BOOL SetDlgItemTextUTF8(HWND hDlg, int nIDDlgItem, LPCTSTR lpString);
 WDL_WIN32_UTF8_IMPL int GetWindowTextUTF8(HWND hWnd, LPTSTR lpString, int nMaxCount);
@@ -27,6 +30,7 @@ WDL_WIN32_UTF8_IMPL BOOL DeleteFileUTF8(LPCTSTR path);
 WDL_WIN32_UTF8_IMPL BOOL MoveFileUTF8(LPCTSTR existfn, LPCTSTR newfn);
 WDL_WIN32_UTF8_IMPL BOOL CopyFileUTF8(LPCTSTR existfn, LPCTSTR newfn, BOOL fie);
 WDL_WIN32_UTF8_IMPL DWORD GetCurrentDirectoryUTF8(DWORD nBufferLength, LPTSTR lpBuffer);
+WDL_WIN32_UTF8_IMPL DWORD GetTempPathUTF8(DWORD nBufferLength, LPTSTR lpBuffer);
 WDL_WIN32_UTF8_IMPL BOOL SetCurrentDirectoryUTF8(LPCTSTR path);
 WDL_WIN32_UTF8_IMPL BOOL RemoveDirectoryUTF8(LPCTSTR path);
 WDL_WIN32_UTF8_IMPL HINSTANCE LoadLibraryUTF8(LPCTSTR path);
@@ -87,6 +91,9 @@ WDL_WIN32_UTF8_IMPL BOOL GetPrivateProfileStructUTF8(LPCTSTR appStr, LPCTSTR key
 WDL_WIN32_UTF8_IMPL BOOL WritePrivateProfileStructUTF8(LPCTSTR appStr, LPCTSTR keyStr, LPVOID pStruct, UINT uSize, LPCTSTR fnStr);
 
 WDL_WIN32_UTF8_IMPL DWORD GetModuleFileNameUTF8(HMODULE hModule, LPTSTR fnStr, DWORD nSize);
+
+WDL_WIN32_UTF8_IMPL DWORD GetLongPathNameUTF8(LPCTSTR lpszShortPath, LPSTR lpszLongPath, DWORD cchBuffer);
+WDL_WIN32_UTF8_IMPL UINT GetTempFileNameUTF8(LPCTSTR lpPathName, LPCTSTR lpPrefixString, UINT uUnique, LPSTR lpTempFileName);
 
 WDL_WIN32_UTF8_IMPL BOOL CreateProcessUTF8( LPCTSTR lpApplicationName, LPTSTR lpCommandLine,
   LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -178,6 +185,11 @@ WDL_WIN32_UTF8_IMPL BOOL CreateProcessUTF8( LPCTSTR lpApplicationName, LPTSTR lp
 #endif
 #define GetCurrentDirectory GetCurrentDirectoryUTF8
 
+#ifdef GetTempPath
+#undef GetTempPath
+#endif
+#define GetTempPath GetTempPathUTF8
+
 #ifdef SetCurrentDirectory
 #undef SetCurrentDirectory
 #endif
@@ -252,12 +264,37 @@ WDL_WIN32_UTF8_IMPL BOOL CreateProcessUTF8( LPCTSTR lpApplicationName, LPTSTR lp
 #endif
 #define GetModuleFileName GetModuleFileNameUTF8
 
+#ifdef GetLongPathName
+#undef GetLongPathName
+#endif
+#define GetLongPathName GetLongPathNameUTF8
+
+#ifdef GetTempFileName
+#undef GetTempFileName
+#endif
+#define GetTempFileName GetTempFileNameUTF8
+
 #ifdef CreateProcess
 #undef CreateProcess
 #endif
 #define CreateProcess CreateProcessUTF8
 
+#ifdef fopen
+#undef fopen
+#endif
+#define fopen fopenUTF8
+
+#ifdef stat
+#undef stat
+#endif
+#define stat(fn,s) statUTF8(fn,s)
+typedef char wdl_utf8_chk_stat_types_assert_failed[sizeof(struct stat) == sizeof(struct _stat) ? 1 : -1];
+
 #else
+
+#if defined(WDL_CHECK_FOR_NON_UTF8_FOPEN) && defined(fopen)
+  #undef fopen
+#endif
 
 // compat defines for when UTF disabled
 #define DrawTextUTF8 DrawText
@@ -269,6 +306,10 @@ WDL_WIN32_UTF8_IMPL BOOL CreateProcessUTF8( LPCTSTR lpApplicationName, LPTSTR lp
 #define WDL_UTF8_HookTreeView(x)
 #define WDL_UTF8_HookTabCtrl(x)
 #define WDL_UTF8_ListViewConvertDispInfoToW(x)
+
+#define LB_GETTEXTUTF8 LB_GETTEXT
+#define LB_GETTEXTLENUTF8 LB_GETTEXTLEN
+
 
 #endif
 

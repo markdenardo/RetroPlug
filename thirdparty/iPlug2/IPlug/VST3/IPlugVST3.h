@@ -59,13 +59,14 @@ public:
   void BeginInformHostOfParamChange(int idx) override;
   void InformHostOfParamChange(int idx, double normalizedValue) override;
   void EndInformHostOfParamChange(int idx) override;
-  void InformHostOfProgramChange() override {}
+  void InformHostOfPresetChange() override {}
   void InformHostOfParameterDetailsChange() override;
   bool EditorResize(int viewWidth, int viewHeight) override;
 
   // IEditorDelegate
   void DirtyParametersFromUI() override;
-  
+  void SendParameterValueFromUI(int paramIdx, double normalisedValue) override;
+
   // IPlugProcessor
   void SetLatency(int samples) override;
   
@@ -79,7 +80,7 @@ public:
   Steinberg::tresult PLUGIN_API process(Steinberg::Vst::ProcessData& data) override;
   Steinberg::tresult PLUGIN_API canProcessSampleSize(Steinberg::int32 symbolicSampleSize) override;
   Steinberg::uint32 PLUGIN_API getLatencySamples() override { return GetLatency(); }
-  Steinberg::uint32 PLUGIN_API getTailSamples() override { return GetTailSize(); } //TODO - infinite tail
+  Steinberg::uint32 PLUGIN_API getTailSamples() override;
   Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream* pState) override;
   Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream* pState) override;
     
@@ -94,23 +95,39 @@ public:
   // IMidiMapping
   Steinberg::tresult PLUGIN_API getMidiControllerAssignment(Steinberg::int32 busIndex, Steinberg::int16 channel, Steinberg::Vst::CtrlNumber midiCCNumber, Steinberg::Vst::ParamID& tag) override;
   
+  // IUnitInfo
+  Steinberg::tresult PLUGIN_API getProgramName(Steinberg::Vst::ProgramListID listId, Steinberg::int32 programIndex, Steinberg::Vst::String128 name /*out*/) override
+  {
+    return GetProgramName(this, listId, programIndex, name);
+  }
+  
+  Steinberg::int32 PLUGIN_API getProgramListCount() override
+  {
+    return GetProgramListCount(this);
+  }
+  
+  Steinberg::tresult PLUGIN_API getProgramListInfo(Steinberg::int32 listIndex, Steinberg::Vst::ProgramListInfo& info) override
+  {
+    return GetProgramListInfo(this, listIndex, info);
+  }
+  
   // IInfoListener
   Steinberg::tresult PLUGIN_API setChannelContextInfos(Steinberg::Vst::IAttributeList* list) override;
 
   /** Get the color of the track that the plug-in is inserted on */
-  virtual void GetTrackColor(int& r, int& g, int& b) override { r = (mChannelColor>>16)&0xff; g = (mChannelColor>>8)&0xff; b = mChannelColor&0xff; };
+  void GetTrackColor(int& r, int& g, int& b) override { r = (mChannelColor>>16)&0xff; g = (mChannelColor>>8)&0xff; b = mChannelColor&0xff; };
 
   /** Get the name of the track that the plug-in is inserted on */
-  virtual void GetTrackName(WDL_String& str) override { str = mChannelName; };
+  void GetTrackName(WDL_String& str) override { str = mChannelName; };
 
   /** Get the index of the track that the plug-in is inserted on */
-  virtual int GetTrackIndex() override { return mChannelIndex; };
+  int GetTrackIndex() override { return mChannelIndex; };
 
   /** Get the namespace of the track that the plug-in is inserted on */
-  virtual void GetTrackNamespace(WDL_String& str) override { str = mChannelNamespace; };
+  void GetTrackNamespace(WDL_String& str) override { str = mChannelNamespace; };
 
   /** Get the namespace index of the track that the plug-in is inserted on */
-  virtual int GetTrackNamespaceIndex() override { return mChannelNamespaceIndex; };
+  int GetTrackNamespaceIndex() override { return mChannelNamespaceIndex; };
 
   Steinberg::Vst::IComponentHandler* GetComponentHandler() { return componentHandler; }
   ViewType* GetView() { return mView; }

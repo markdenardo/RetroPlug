@@ -6,7 +6,7 @@
 #define PLUG_MFR_ID 'Acme'
 #define PLUG_URL_STR "https://iplug2.github.io"
 #define PLUG_EMAIL_STR "spam@me.com"
-#define PLUG_COPYRIGHT_STR "Copyright 2019 Acme Inc"
+#define PLUG_COPYRIGHT_STR "Copyright 2020 Acme Inc"
 #define PLUG_CLASS_NAME IPlugEffect
 
 #define BUNDLE_NAME "IPlugEffect"
@@ -28,6 +28,7 @@
 #define PLUG_HEIGHT 600
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
+#define PLUG_HOST_RESIZE 0
 
 #define AUV2_ENTRY IPlugEffect_Entry
 #define AUV2_ENTRY_STR "IPlugEffect_Entry"
@@ -44,11 +45,15 @@
 
 #define VST3_SUBCATEGORY "Fx"
 
+#define CLAP_MANUAL_URL "https://iplug2.github.io/manuals/example_manual.pdf"
+#define CLAP_SUPPORT_URL "https://github.com/iPlug2/iPlug2/wiki"
+#define CLAP_DESCRIPTION "A simple audio effect for modifying gain"
+#define CLAP_FEATURES "audio-effect"//, "utility"
+
 #define APP_NUM_CHANNELS 2
 #define APP_N_VECTOR_WAIT 0
 #define APP_MULT 1
 #define APP_COPY_AUV3 0
-#define APP_RESIZABLE 0
 #define APP_SIGNAL_VECTOR_SIZE 64
 
 #define ROBOTO_FN "Roboto-Regular.ttf"

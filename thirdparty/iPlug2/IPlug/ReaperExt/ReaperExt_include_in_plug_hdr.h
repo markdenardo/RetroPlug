@@ -16,7 +16,7 @@
  * Include this file in the main header for your reaper extension
 */
 
-#include "config.h"
+#include "../../../../config/config.h"
 
 #include "IPlugPlatform.h"
 

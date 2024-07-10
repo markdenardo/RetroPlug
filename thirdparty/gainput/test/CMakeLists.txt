@@ -1,8 +1,8 @@
 
 project(gainputtest)
 
-include_directories(../lib/include/)
-include_directories(../extern/catch/)
+include_directories(../lib/include)
+include_directories(../extern/catch)
 
 file(GLOB_RECURSE sources *.cpp)
 

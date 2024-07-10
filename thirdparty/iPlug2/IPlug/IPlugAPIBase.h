@@ -58,10 +58,10 @@ public:
    * @return \c true in order to indicate that the states are equal. */
   virtual bool CompareState(const uint8_t* pIncomingState, int startPos) const;
 
-  /* implement this and return true to trigger your custom about box, when someone clicks about in the menu of a standalone app or VST3 plugin */
+  /* Implement this and return true to trigger your custom about box, when someone clicks about in the menu of a standalone app or VST3 plugin */
   virtual bool OnHostRequestingAboutBox() { return false; }
 
-  /* implement this and return true to trigger your custom help info, when someone clicks help in the menu of a standalone app or VST3 plugin */
+  /* Implement this and return true to trigger your custom help info, when someone clicks help in the menu of a standalone app or VST3 plugin */
   virtual bool OnHostRequestingProductHelp() { return false; }
   
   /** Implement this to do something specific when IPlug becomes aware of the particular host that is hosting the plug-in.
@@ -77,7 +77,11 @@ public:
    * @param width The width the host offers
    * @param height The height the host offers
    * @return return \c true if your plug-in supports these dimensions */
-  virtual bool OnHostRequestingSupportedViewConfiguration(int width, int height) { return true; }
+  virtual bool OnHostRequestingSupportedViewConfiguration(int width, int height)
+  {
+    // Logic/GB offer one option with 0w, 0h, and if we allow that, our AUv3 has "our" size as its 100% setting
+    return ((width + height) == 0);
+  }
   
   /** Called by some AUv3 plug-in hosts when a particular UI size is selected
    * @param width The selected width
@@ -107,9 +111,6 @@ public:
   virtual void OnIdle() {}
     
 #pragma mark - Methods you can call - some of which have custom implementations in the API classes, some implemented in IPlugAPIBase.cpp
-  /** Helper method, used to print some info to the console in debug builds. Can be overridden in other IPlugAPIBases, for specific functionality, such as printing UI details. */
-  virtual void PrintDebugInfo() const;
-
   /** SetParameterValue is called from the UI in the middle of a parameter change gesture (possibly via delegate) in order to update a parameter's value.
    * It will update mParams[paramIdx], call InformHostOfParamChange and IPlugAPIBase::OnParamChange();
    * @param paramIdx The index of the parameter that changed
@@ -131,7 +132,8 @@ public:
   /** Get the namespace index of the track that the plug-in is inserted on */
   virtual int GetTrackNamespaceIndex() { return 0; }
 
-  /** /todo */
+  /** In a distributed VST3 or WAM plugin, if you modify the parameters on the UI side (e.g. recall preset in custom preset browser), 
+   * you can call this to update the parameters on the DSP side */
   virtual void DirtyParametersFromUI() override;
 
 #pragma mark - Methods called by the API class - you do not call these methods in your plug-in class
@@ -176,11 +178,10 @@ public:
   
   void DeferSysexMsg(const ISysEx& msg) override
   {
-    SysExData data(msg.mOffset, msg.mSize, msg.mData); // copies data
-    mSysExDataFromEditor.Push(data);
+    mSysExDataFromEditor.PushFromArgs(msg.mOffset, msg.mSize, msg.mData); // copies data
   }
 
-  /** /todo */
+  /** Called by the API class to create the timer that pumps the parameter/message queues */
   void CreateTimer();
   
 private:
@@ -202,15 +203,27 @@ private:
   virtual void InformHostOfParamChange(int paramIdx, double normalizedValue) {}
   
   //DISTRIBUTED ONLY (Currently only VST3)
-  /** /todo */
+  /** \todo */
   virtual void TransmitMidiMsgFromProcessor(const IMidiMsg& msg) {}
   
-  /** /todo */
+  /** \todo */
   virtual void TransmitSysExDataFromProcessor(const SysExData& data) {}
 
   void OnTimer(Timer& t);
 
-protected:
+  friend class IPlugAPP;
+  friend class IPlugAAX;
+  friend class IPlugAU;
+  friend class IPlugAUv3;
+  friend class IPlugCLAP;
+  friend class IPlugVST2;
+  friend class IPlugVST3;
+  friend class IPlugVST3Controller;
+  friend class IPlugVST3Processor;
+  friend class IPlugWAM;
+  friend class IPlugWEB;
+
+private:
   WDL_String mParamDisplayStr;
   std::unique_ptr<Timer> mTimer;
   

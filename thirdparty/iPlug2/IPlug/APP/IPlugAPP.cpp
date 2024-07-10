@@ -13,6 +13,8 @@
 
 #if defined OS_MAC || defined OS_LINUX
 #include <IPlugSWELL.h>
+#else
+extern float GetScaleForHWND(HWND hWnd);
 #endif
 
 using namespace iplug;
@@ -41,13 +43,32 @@ bool IPlugAPP::EditorResize(int viewWidth, int viewHeight)
     
   if (viewWidth != GetEditorWidth() || viewHeight != GetEditorHeight())
   {
-    #ifdef OS_MAC
-    #define TITLEBAR_BODGE 22 //TODO: sort this out
-    RECT r;
-    GetWindowRect(gHWND, &r);
-    SetWindowPos(gHWND, 0, r.left, r.bottom - viewHeight - TITLEBAR_BODGE, viewWidth, viewHeight + TITLEBAR_BODGE, 0);
+    #if defined OS_MAC || defined NO_IGRAPHICS 
+    RECT rcClient, rcWindow;
+    POINT ptDiff;
+    
+    GetClientRect(gHWND, &rcClient);
+    GetWindowRect(gHWND, &rcWindow);
+    
+    ptDiff.x = (rcWindow.right - rcWindow.left) - rcClient.right;
+    ptDiff.y = (rcWindow.bottom - rcWindow.top) - rcClient.bottom;
+    
+    int flags = 0;
+    
+    #ifdef OS_WIN
+    flags = SWP_NOMOVE;
+    float ss = GetScaleForHWND(gHWND);
+    #else
+    float ss = 1.f;
+    #endif
+    
+    SetWindowPos(gHWND, 0, rcWindow.left * ss,
+                 (rcWindow.bottom - viewHeight - ptDiff.y) * ss,
+                 (viewWidth + ptDiff.x) * ss,
+                 (viewHeight + ptDiff.y) * ss, flags);
     parentResized = true;
     #endif
+    
     SetEditorSize(viewWidth, viewHeight);
   }
   

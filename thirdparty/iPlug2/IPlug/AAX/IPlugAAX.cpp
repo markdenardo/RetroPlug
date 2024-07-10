@@ -84,7 +84,11 @@ AAX_Result AAX_CEffectGUI_IPLUG::SetControlHighlightInfo(AAX_CParamID paramID, A
   {
     int paramIdx = atoi(paramID) - kAAXParamIdxOffset;
 
-    pViewInterface->SetPTParameterHighlight(paramIdx, (bool) iIsHighlighted, (int) iColor);
+    if (paramIdx != kNoParameter)
+    {
+      pViewInterface->SetPTParameterHighlight(paramIdx, (bool) iIsHighlighted, (int) iColor);
+    }
+    
     return AAX_SUCCESS;
   }
   
@@ -102,14 +106,9 @@ IPlugAAX::IPlugAAX(const InstanceInfo& info, const Config& config)
   SetChannelConnections(ERoute::kInput, 0, MaxNChannels(ERoute::kInput), true);
   SetChannelConnections(ERoute::kOutput, 0, MaxNChannels(ERoute::kOutput), true);
   
-  if (MaxNChannels(ERoute::kInput)) 
-  {
-    mLatencyDelay = std::unique_ptr<NChanDelayLine<PLUG_SAMPLE_DST>>(new NChanDelayLine<PLUG_SAMPLE_DST>(MaxNChannels(ERoute::kInput), MaxNChannels(ERoute::kOutput)));
-    mLatencyDelay->SetDelayTime(config.latency);
-  }
-  
   SetBlockSize(DEFAULT_BLOCK_SIZE);
-  
+  InitLatencyDelay();
+
   mMaxNChansForMainInputBus = MaxNChannelsForBus(kInput, 0);
   
   CreateTimer();
@@ -528,7 +527,37 @@ AAX_Result IPlugAAX::CompareActiveChunk(const AAX_SPlugInChunk* pChunk, AAX_CBoo
   *pIsEqual = CompareState((const unsigned char*) pChunk->fData, 0);
     
   return AAX_SUCCESS;
-}  
+}
+
+AAX_Result IPlugAAX::NotificationReceived (AAX_CTypeID type, const void* pData, uint32_t size)
+{
+  switch (type)
+  {
+    case AAX_eNotificationEvent_TrackNameChanged:
+      if (pData)
+        mTrackName.Set(static_cast<const AAX_IString*>(pData)->Get());
+      break;
+//    case AAX_eNotificationEvent_SessionBeingOpened:
+//      break;
+//    case AAX_eNotificationEvent_PresetOpened:
+//      break;
+    case AAX_eNotificationEvent_EnteringOfflineMode:
+      SetRenderingOffline(true);
+      break;
+    case AAX_eNotificationEvent_ExitingOfflineMode:
+      SetRenderingOffline(false);
+      break;
+//    case AAX_eNotificationEvent_SideChainBeingConnected:
+//      break;
+//    case AAX_eNotificationEvent_SideChainBeingDisconnected:
+//      break;
+//    case AAX_eNotificationEvent_SignalLatencyChanged:
+    default:
+      break;
+  }
+
+  return AAX_CEffectParameters::NotificationReceived (type, pData, size);
+}
 
 void IPlugAAX::BeginInformHostOfParamChange(int idx)
 {
@@ -559,8 +588,13 @@ bool IPlugAAX::EditorResize(int viewWidth, int viewHeight)
     oEffectViewSize.vert = (float) viewHeight;
     
     if (pViewInterface && (viewWidth != GetEditorWidth() || viewHeight != GetEditorHeight()))
-      pViewInterface->GetViewContainer()->SetViewSize(oEffectViewSize);
-
+    {
+      auto* viewContainer = pViewInterface->GetViewContainer();
+      
+      if (viewContainer)
+        viewContainer->SetViewSize(oEffectViewSize);
+    }
+    
     SetEditorSize(viewWidth, viewHeight);
   }
   

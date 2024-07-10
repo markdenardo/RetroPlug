@@ -88,7 +88,7 @@ using namespace igraphics;
 {
   IPopupMenu* mIPopupMenu;
 }
-- (id) initWithIPopupMenuAndReciever: (IPopupMenu*) pMenu : (NSView*) pView;
+- (id) initWithIPopupMenuAndReceiver: (IPopupMenu*) pMenu : (NSView*) pView;
 - (IPopupMenu*) iPopupMenu;
 @end
 
@@ -113,7 +113,7 @@ using namespace igraphics;
 #define VIEW_BASE NSView
 #endif
 
-@interface IGRAPHICS_VIEW : VIEW_BASE <NSTextFieldDelegate/*, WKScriptMessageHandler*/>
+@interface IGRAPHICS_VIEW : VIEW_BASE <NSTextFieldDelegate, NSDraggingSource/*, WKScriptMessageHandler*/>
 {
   CVDisplayLinkRef mDisplayLink;
   dispatch_source_t mDisplaySource;
@@ -139,6 +139,7 @@ using namespace igraphics;
 - (void) render;
 - (void) killTimer;
 - (void) onTimer: (NSTimer*) pTimer;
+- (void) viewDidChangeEffectiveAppearance;
 //mouse
 - (void) getMouseXY: (NSEvent*) pEvent : (float&) x : (float&) y;
 - (IMouseInfo) getMouseLeft: (NSEvent*) pEvent;
@@ -156,7 +157,6 @@ using namespace igraphics;
 - (void) scrollWheel: (NSEvent*) pEvent;
 - (void) keyDown: (NSEvent*) pEvent;
 - (void) keyUp: (NSEvent*) pEvent;
-- (void) flagsChanged:(NSEvent *) pEvent;
 //text entry
 - (void) removeFromSuperview;
 - (void) controlTextDidEndEditing: (NSNotification*) pNotification;
@@ -174,19 +174,8 @@ using namespace igraphics;
 //drag-and-drop
 - (NSDragOperation) draggingEntered: (id <NSDraggingInfo>) sender;
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender;
+- (NSDragOperation)draggingSession:(NSDraggingSession*) session sourceOperationMaskForDraggingContext:(NSDraggingContext)context;
 //
 - (void) setMouseCursor: (ECursor) cursorType;
 @end
-
-#ifdef IGRAPHICS_IMGUI
-#import <MetalKit/MetalKit.h>
-
-@interface IGRAPHICS_IMGUIVIEW : MTKView
-{
-  IGRAPHICS_VIEW* mView;
-}
-@property (nonatomic, strong) id <MTLCommandQueue> commandQueue;
-- (id) initWithIGraphicsView: (IGRAPHICS_VIEW*) pView;
-@end
-#endif
 

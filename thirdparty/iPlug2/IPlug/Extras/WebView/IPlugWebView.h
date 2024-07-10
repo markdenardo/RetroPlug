@@ -39,14 +39,33 @@ public:
   IWebView(bool opaque = true);
   virtual ~IWebView();
   
-  void* OpenWebView(void* pParent, float x, float y, float w, float h, float scale = 1.);
+  void* OpenWebView(void* pParent, float x, float y, float w, float h, float scale = 1.0f, bool enableDevTools = true);
   void CloseWebView();
+  void HideWebView(bool hide);
   
+  /** Load an HTML string into the webview */
   void LoadHTML(const char* html);
+  
+  /** Instruct the webview to load an external URL */
   void LoadURL(const char* url);
-  void LoadFile(const char* fileName, const char* bundleID);
+  
+  /** Load a file on disk into the web view
+   * @param fileName On windows this should be an absolute path to the file you want to load. On macOS/iOS it can just be the file name if the file is packaged into a subfolder "web" of the bundle resources
+   * @param bundleID The NSBundleID of the macOS/iOS bundle, not required on Windows */
+  void LoadFile(const char* fileName, const char* bundleID = "");
+  
+  /** Runs some JavaScript in the webview
+   * @param scriptStr UTF8 encoded JavaScript code to run
+   * @param func A function conforming to completionHandlerFunc that should be called on successful execution of the script */
   void EvaluateJavaScript(const char* scriptStr, completionHandlerFunc func = nullptr);
+  
+  /** Enable scrolling on the webview. NOTE: currently only implemented for iOS */
   void EnableScroll(bool enable);
+  
+  /** Sets whether the webview is interactive */
+  void EnableInteraction(bool enable);
+  
+  /** Set the bounds of the webview in the parent window. xywh are specifed in relation to a 1:1 non retina screen */
   void SetWebViewBounds(float x, float y, float w, float h, float scale = 1.);
 
   /** Called when the web view is ready to receive navigation instructions*/
@@ -55,12 +74,9 @@ public:
   /** Called after navigation instructions have been exectued and e.g. a page has loaded */
   virtual void OnWebContentLoaded() {}
   
-  /** When a script in the web view posts a message, it will arrive as a json string here */
+  /** When a script in the web view posts a message, it will arrive as a UTF8 json string here */
   virtual void OnMessageFromWebView(const char* json) {}
-
-#if defined OS_WIN
-  void SetWebViewPaths(const char* dllPath, const char* tmpPath) { mDLLPath.Set(dllPath); mTmpPath.Set(tmpPath); }
-#endif
+  
 private:
   bool mOpaque = true;
 #if defined OS_MAC || defined OS_IOS
@@ -68,12 +84,13 @@ private:
   void* mWebConfig = nullptr;
   void* mScriptHandler = nullptr;
 #elif defined OS_WIN
+  HWND mParentWnd = NULL;
   wil::com_ptr<ICoreWebView2Controller> mWebViewCtrlr;
   wil::com_ptr<ICoreWebView2> mWebViewWnd;
   EventRegistrationToken mWebMessageReceivedToken;
   EventRegistrationToken mNavigationCompletedToken;
-  WDL_String mDLLPath;
-  WDL_String mTmpPath;
+  EventRegistrationToken mContextMenuRequestedToken;
+  bool mShowOnLoad = true;
 #endif
 };
 

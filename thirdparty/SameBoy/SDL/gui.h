@@ -1,5 +1,4 @@
-#ifndef gui_h
-#define gui_h
+#pragma once
 
 #include <SDL.h>
 #include <Core/gb.h>
@@ -22,6 +21,7 @@ extern SDL_Window *window;
 extern SDL_Renderer *renderer;
 extern SDL_Texture *texture;
 extern SDL_PixelFormat *pixel_format;
+extern SDL_Joystick *joystick;
 extern SDL_Haptic *haptic;
 extern shader_t shader;
 
@@ -66,5 +66,4 @@ extern unsigned osd_countdown;
 extern unsigned osd_text_lines;
 void convert_mouse_coordinates(signed *x, signed *y);
 const GB_palette_t *current_dmg_palette(void);
-
-#endif
+void update_swap_interval(void);

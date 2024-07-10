@@ -65,8 +65,8 @@ static uint32_t color_to_int(NSColor *color)
 
                                                               @"GBFilter": @"NearestNeighbor",
                                                               @"GBColorCorrection": @(GB_COLOR_CORRECTION_MODERN_BALANCED),
-                                                              @"GBHighpassFilter": @(GB_HIGHPASS_REMOVE_DC_OFFSET),
-                                                              @"GBRewindLength": @(10),
+                                                              @"GBHighpassFilter": @(GB_HIGHPASS_ACCURATE),
+                                                              @"GBRewindLength": @(120),
                                                               @"GBFrameBlendingMode": @([defaults boolForKey:@"DisableFrameBlending"]? GB_FRAME_BLENDING_MODE_DISABLED : GB_FRAME_BLENDING_MODE_ACCURATE),
                                                               
                                                               @"GBDMGModel": @(GB_MODEL_DMG_B),
@@ -144,6 +144,7 @@ static uint32_t color_to_int(NSColor *color)
                                                               },
                                                               
                                                               @"NSToolbarItemForcesStandardSize": @YES, // Forces Monterey to resepect toolbar item sizes
+                                                              @"NSToolbarItemWarnOnMinMaxSize": @NO, // Not going to use Constraints, Apple
                                                               }];
     
     [JOYController startOnRunLoop:[NSRunLoop currentRunLoop] withOptions:@{
@@ -284,7 +285,15 @@ static uint32_t color_to_int(NSColor *color)
             dispatch_async(dispatch_get_main_queue(), ^{
                 NSArray *objects;
                 [[NSBundle mainBundle] loadNibNamed:@"UpdateWindow" owner:self topLevelObjects:&objects];
-                self.updateChanges.preferences.standardFontFamily = [NSFont systemFontOfSize:0].familyName;
+                if (@available(macOS 10.11, *)) {
+                    self.updateChanges.preferences.standardFontFamily = @"-apple-system";
+                }
+                else if (@available(macOS 10.10, *)) {
+                    self.updateChanges.preferences.standardFontFamily = @"Helvetica Neue";
+                }
+                else {
+                    self.updateChanges.preferences.standardFontFamily = @"Lucida Grande";
+                }
                 self.updateChanges.preferences.fixedFontFamily = @"Menlo";
                 self.updateChanges.drawsBackground = false;
                 [self.updateChanges.mainFrame loadHTMLString:html baseURL:nil];
@@ -430,13 +439,13 @@ static uint32_t color_to_int(NSColor *color)
     [self.updateProgressSpinner startAnimation:nil];
     self.updateProgressButton.title = @"Cancel";
     self.updateProgressButton.enabled = true;
-    self.updateProgressLabel.stringValue = @"Downloading update...";
+    self.updateProgressLabel.stringValue = @"Downloading update…";
     _updateState = UPDATE_DOWNLOADING;
     _updateTask = [[NSURLSession sharedSession] downloadTaskWithURL: [NSURL URLWithString:_updateURL] completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
         _updateTask = nil;
         dispatch_sync(dispatch_get_main_queue(), ^{
             self.updateProgressButton.enabled = false;
-            self.updateProgressLabel.stringValue = @"Extracting update...";
+            self.updateProgressLabel.stringValue = @"Extracting update…";
             _updateState = UPDATE_EXTRACTING;
         });
         
@@ -498,7 +507,7 @@ static uint32_t color_to_int(NSColor *color)
 - (void)performUpgrade
 {
     self.updateProgressButton.enabled = false;
-    self.updateProgressLabel.stringValue = @"Instaling update...";
+    self.updateProgressLabel.stringValue = @"Instaling update…";
     _updateState = UPDATE_INSTALLING;
     self.updateProgressButton.enabled = false;
     [self.updateProgressSpinner startAnimation:nil];
@@ -590,7 +599,7 @@ static uint32_t color_to_int(NSColor *color)
     
     JOYButtonUsage usage = ((JOYButtonUsage)[mapping[n2s(button.uniqueID)] unsignedIntValue]) ?: -1;
     if (!mapping && usage >= JOYButtonUsageGeneric0) {
-        usage = (const JOYButtonUsage[]){JOYButtonUsageY, JOYButtonUsageA, JOYButtonUsageB, JOYButtonUsageX}[(usage - JOYButtonUsageGeneric0) & 3];
+        usage = GB_inline_const(JOYButtonUsage[], {JOYButtonUsageY, JOYButtonUsageA, JOYButtonUsageB, JOYButtonUsageX})[(usage - JOYButtonUsageGeneric0) & 3];
     }
     
     if (usage == GBJoyKitHotkey1 || usage == GBJoyKitHotkey2) {

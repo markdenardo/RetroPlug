@@ -1,0 +1,15 @@
+packages: ./
+          ./haddock-api
+          ./haddock-library
+          ./haddock-test
+
+test-show-details: direct
+
+package haddock-library
+  tests: False
+
+package haddock-api
+  tests: False
+
+-- Pinning the index-state helps to make reasonably CI deterministic
+index-state: 2024-06-18T11:54:44Z

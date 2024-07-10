@@ -9,6 +9,9 @@
 #ifndef __LICE_CPP_IMPLEMENTED__
 #define __LICE_CPP_IMPLEMENTED__
 
+#ifndef WDL_NO_DEFINE_MINMAX
+#define WDL_NO_DEFINE_MINMAX
+#endif
 #include "lice.h"
 #include <math.h>
 #include <stdio.h> // only included in case we need to debug with sprintf etc
@@ -132,7 +135,8 @@ LICE_SysBitmap::LICE_SysBitmap(int w, int h)
 #endif
   m_bits=0;
   m_width=m_height=0;
-  m_scaling=0;
+  m_adv_scaling=0;
+  m_draw_scaling=0;
 
   __resize(w,h);
 }
@@ -161,10 +165,10 @@ bool LICE_SysBitmap::__resize(int w, int h)
   m_width=w;
   m_height=h;
 
-  if (m_scaling > 0)
+  if (m_draw_scaling > 0)
   {
-    w = (w * m_scaling) >> 8;
-    h = (h * m_scaling) >> 8;
+    w = (w * m_draw_scaling) >> 8;
+    h = (h * m_draw_scaling) >> 8;
   }
   w = (w+3)&~3; // always keep backing store a multiple of 4px wide
 
@@ -309,7 +313,7 @@ class _LICE_Template_Blit1 // these controlled by LICE_FAVOR_SIZE_EXTREME
 #endif
   public:
     static void solidBlit(LICE_pixel_chan *dest, int w, int h, 
-                         int ir, int ig, int ib, int ia,
+                         int ir, int ig, int ib, int pxa, int ia,
                          int dest_span
 #ifdef LICE_FAVOR_SIZE_EXTREME
                           , LICE_COMBINEFUNC combFunc
@@ -322,7 +326,7 @@ class _LICE_Template_Blit1 // these controlled by LICE_FAVOR_SIZE_EXTREME
         int n=w;
         while (n--)
         {
-          DOPIX(pout,ir,ig,ib,ia,ia);          
+          DOPIX(pout,ir,ig,ib,pxa,ia);
           pout += sizeof(LICE_pixel)/sizeof(LICE_pixel_chan);
         }
         dest+=dest_span;
@@ -968,6 +972,7 @@ static void LICE_BlitInt(LICE_IBitmap *dest, LICE_IBitmap *src, int dstx, int ds
   if (dstx < 0) { sr.left -= dstx; dstx=0; }
   if (dsty < 0) { sr.top -= dsty; dsty=0; }  
 
+  if (sr.left < 0 || sr.top < 0) return; // overflow check
   if (sr.right <= sr.left || sr.bottom <= sr.top || dstx >= destbm_w || dsty >= destbm_h) return;
 
   if (sr.right > sr.left + (destbm_w-dstx)) sr.right = sr.left + (destbm_w-dstx);
@@ -1108,6 +1113,8 @@ void LICE_Blur(LICE_IBitmap *dest, LICE_IBitmap *src, int dstx, int dsty, int sr
   // clip to output
   if (dstx < 0) { sr.left -= dstx; dstx=0; }
   if (dsty < 0) { sr.top -= dsty; dsty=0; }
+
+  if (sr.left < 0 || sr.top < 0) return; // overflow check
 
   const int destbm_w = dest->getWidth(), destbm_h = dest->getHeight();
   if (sr.right <= sr.left || sr.bottom <= sr.top || dstx >= destbm_w || dsty >= destbm_h) return;
@@ -2160,7 +2167,7 @@ void LICE_FillRect(LICE_IBitmap *dest, int x, int y, int w, int h, LICE_pixel co
   LICE_COMBINEFUNC blitfunc=NULL;      
   #define __LICE__ACTION(comb) blitfunc=comb::doPix;
 #else
-  #define __LICE__ACTION(comb) _LICE_Template_Blit1<comb>::solidBlit((LICE_pixel_chan*)p,w,h,LICE_GETR(color),LICE_GETG(color),LICE_GETB(color),ia,sp*sizeof(LICE_pixel))
+  #define __LICE__ACTION(comb) _LICE_Template_Blit1<comb>::solidBlit((LICE_pixel_chan*)p,w,h,LICE_GETR(color),LICE_GETG(color),LICE_GETB(color),LICE_GETA(color),ia,sp*sizeof(LICE_pixel))
 #endif
 
     // we use __LICE_ACTION_NOSRCALPHA even though __LICE_ACTION_CONSTANTALPHA
@@ -2169,7 +2176,7 @@ void LICE_FillRect(LICE_IBitmap *dest, int x, int y, int w, int h, LICE_pixel co
   #undef __LICE__ACTION
 
 #ifdef LICE_FAVOR_SIZE_EXTREME
-  if (blitfunc) _LICE_Template_Blit1::solidBlit((LICE_pixel_chan*)p,w,h,LICE_GETR(color),LICE_GETG(color),LICE_GETB(color),ia,sp*sizeof(LICE_pixel),blitfunc);
+  if (blitfunc) _LICE_Template_Blit1::solidBlit((LICE_pixel_chan*)p,w,h,LICE_GETR(color),LICE_GETG(color),LICE_GETB(color),LICE_GETA(color),ia,sp*sizeof(LICE_pixel),blitfunc);
 #endif
 }
 
@@ -2699,11 +2706,13 @@ void LICE_DrawGlyphEx(LICE_IBitmap* dest, int x, int y, LICE_pixel color, const 
   
   if (x < 0) {
     src_x -= x;
+    if (src_x < 0) return; // overflow
     src_w += x;
     x = 0;
   }
   if (y < 0) {
     src_y -= y;
+    if (src_y < 0) return; // overflow
     src_h += y;
     y = 0;
   }

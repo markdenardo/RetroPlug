@@ -1,0 +1,12 @@
+
+==================== CodeGenInput STG: ====================
+BCO_toplevel :: GHC.Types.IO [GHC.Types.Any]
+[LclIdX] =
+    {} \u []
+        let {
+          sat :: [GHC.Types.Any]
+          [LclId] =
+              :! [GHC.Tuple.() GHC.Types.[]];
+        } in  GHC.Internal.Base.returnIO sat;
+
+

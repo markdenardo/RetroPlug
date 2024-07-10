@@ -27,7 +27,7 @@
 #ifndef _CUSTOM_MATH_H_
 #define _CUSTOM_MATH_H_
 
-#include "math.h"
+#include "../../../SameBoy/Windows/math.h"
 
 /* check for "c89" mode */
 #if (defined _MSC_VER && defined __STDC__) || \

@@ -5,7 +5,7 @@
 #include "IconsFontaudio.h"
 
 IPlugControls::IPlugControls(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPrograms))
+: Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
   GetParam(kParamGain)->InitDouble("Gain", 100., 0., 100.0, 0.01, "%");
   GetParam(kParamMode)->InitEnum("Mode", 0, 4, "", IParam::kFlagsNone, "", "one", "two", "three", "four");
@@ -14,7 +14,7 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
 
 #if IPLUG_EDITOR // http://bit.ly/2S64BDd
   mMakeGraphicsFunc = [&]() {
-    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
+    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
   };
   
   mLayoutFunc = [&](IGraphics* pGraphics) {
@@ -30,7 +30,7 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     pGraphics->EnableTooltips(true);
 
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, true);
-    pGraphics->AttachPanelBackground(COLOR_GRAY);
+    pGraphics->AttachPanelBackground(mBGControlPattern);
     pGraphics->AttachTextEntryControl();
     
 #ifndef OS_IOS
@@ -38,7 +38,7 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
 #endif
     pGraphics->AttachBubbleControl();
     
-    IRECT b = pGraphics->GetBounds().GetPadded(-5);
+    IRECT b = pGraphics->GetBounds();
     
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
     pGraphics->LoadFont("ForkAwesome", FORK_AWESOME_FN);
@@ -84,11 +84,11 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     int cellIdx = -1;
     
     auto nextCell = [&](){
-      return b.GetGridCell(++cellIdx, nRows, nCols).GetPadded(-5.);
+      return b.GetPadded(-5.).GetGridCell(++cellIdx, nRows, nCols).GetPadded(-5.);
     };
 
     auto sameCell = [&](){
-      return b.GetGridCell(cellIdx, nRows, nCols).GetPadded(-5.);
+      return b.GetPadded(-5.).GetGridCell(cellIdx, nRows, nCols).GetPadded(-5.);
     };
     
     auto AddLabel = [&](const char* label){
@@ -157,17 +157,17 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
 
     pGraphics->AttachControl(new IVKnobControl(nextCell().GetCentredInside(110.), kParamGain, "IVKnobControl", style, true), kNoTag, "vcontrols");
     
-    pGraphics->AttachControl(new IVSliderControl(nextCell(), kParamGain, "IVSliderControl", style.WithRoundness(1.f), true, EDirection::Vertical, DEFAULT_GEARING, 6.f, 6.f, true), kCtrlTagVectorSlider, "vcontrols");
-    pGraphics->AttachControl(new IVSliderControl(nextCell().SubRectVertical(3, 0), kParamGain, "IVSliderControl H", style, true, EDirection::Horizontal), kCtrlTagVectorSlider, "vcontrols");
+    pGraphics->AttachControl(new IVSliderControl(nextCell(), kParamGain, "IVSliderControl", style.WithRoundness(1.f), true, EDirection::Vertical, DEFAULT_GEARING, 6.f, 6.f, true), kCtrlTagVectorSliderV, "vcontrols");
+    pGraphics->AttachControl(new IVSliderControl(nextCell().SubRectVertical(3, 0), kParamGain, "IVSliderControl H", style, true, EDirection::Horizontal), kCtrlTagVectorSliderH, "vcontrols");
     pGraphics->AttachControl(new IVRangeSliderControl(sameCell().SubRectVertical(3, 1), {kParamFreq1, kParamFreq2}, "IVRangeSliderControl", style, EDirection::Horizontal, true, 8.f, 2.f), kNoTag, "vcontrols");
     pGraphics->AttachControl(new ISVGSliderControl(sameCell().SubRectVertical(3, 2), hsliderHandleSVG, hsliderTrackSVG, kParamGain, EDirection::Horizontal), kNoTag, "svgcontrols")->SetTooltip("ISVGSlider H");
     
     auto button1action = [pGraphics](IControl* pCaller) {
       SplashClickActionFunc(pCaller);
-      pGraphics->ShowMessageBox("Message Title", "Message", kMB_YESNO, [&](EMsgBoxResult result) {
+      pGraphics->ShowMessageBox("Message", "Title", kMB_YESNO, [&](EMsgBoxResult result) {
                                                       WDL_String str;
                                                       str.SetFormatted(32, "%s pressed", kMessageResultStrs[result]);
-                                                      dynamic_cast<ITextControl*>(pGraphics->GetControlWithTag(kCtrlTagDialogResult))->SetStr(str.Get());
+                                                      pGraphics->GetControlWithTag(kCtrlTagDialogResult)->As<ITextControl>()->SetStr(str.Get());
                                                     });
     };
     
@@ -192,23 +192,39 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     
     pGraphics->AttachControl(new IVSwitchControl(nextCell().SubRectVertical(3, 0), kParamMode, "IVSwitchControl", style.WithValueText(IText(24.f, EAlign::Center))), kNoTag, "vcontrols");
     pGraphics->AttachControl(new IVToggleControl(sameCell().SubRectVertical(3, 1), SplashClickActionFunc, "IVToggleControl", style.WithValueText(forkAwesomeText), "", ICON_FK_CHECK), kNoTag, "vcontrols");
-    pGraphics->AttachControl(new IVRadioButtonControl(nextCell().GetCentredInside(110.), kParamMode, {}, "IVRadioButtonControl", style, EVShape::Ellipse, EDirection::Vertical, 10.f), kCtrlTagRadioButton, "vcontrols");
+    pGraphics->AttachControl(new IVMenuButtonControl(sameCell().SubRectVertical(3, 2), kParamMode, "IVMenuButtonControl", style), kNoTag, "vcontrols");
+    pGraphics->AttachControl(new IVRadioButtonControl(nextCell().GetCentredInside(110.), kParamMode, {"one", "two", "three", "four"}, "IVRadioButtonControl", style, EVShape::Ellipse, EDirection::Vertical, 10.f), kCtrlTagRadioButton, "vcontrols");
     pGraphics->AttachControl(new IVTabSwitchControl(nextCell().SubRectVertical(3, 0), SplashClickActionFunc, {ICON_FAU_FILTER_LOWPASS, ICON_FAU_FILTER_BANDPASS, ICON_FAU_FILTER_HIGHPASS}, "IVTabSwitchControl", style.WithValueText(fontaudioText), EVShape::EndsRounded), kCtrlTagTabSwitch, "vcontrols");
     pGraphics->AttachControl(new IVSlideSwitchControl(sameCell().SubRectVertical(3, 1), kParamMode, "IVSlideSwitchControl", style, true), kNoTag, "vcontrols");
     pGraphics->AttachControl(new IVXYPadControl(nextCell(), {kParamFreq1, kParamFreq2}, "IVXYPadControl", style), kNoTag, "vcontrols");
     pGraphics->AttachControl(new IVMultiSliderControl<4>(nextCell(), "IVMultiSliderControl", style), kNoTag, "vcontrols");
-    pGraphics->AttachControl(new IVMeterControl<2>(nextCell(), "IVMeterControl", style.WithColor(kFG, COLOR_WHITE.WithOpacity(0.3f)), EDirection::Vertical, {"L", "R"}), kCtrlTagMeter, "vcontrols");
-    pGraphics->AttachControl(new IVScopeControl<2>(nextCell(), "IVScopeControl", style.WithColor(kFG, COLOR_BLACK)), kCtrlTagScope, "vcontrols");
-    pGraphics->AttachControl(new IVDisplayControl(nextCell(), "IVDisplayControl", style, EDirection::Horizontal, -1., 1., 0., 512), kCtrlTagDisplay, "vcontrols");
+    pGraphics->AttachControl(new IVMeterControl<2>(nextCell(), "IVMeterControl - Lin", style.WithColor(kFG, COLOR_WHITE.WithOpacity(0.3f)), EDirection::Vertical, {"L", "R"}), kCtrlTagMeter, "vcontrols");
+    pGraphics->AttachControl(new IVPeakAvgMeterControl<2>(nextCell(), "IVPeakAvgMeterControl - Log", style.WithColor(kFG, COLOR_WHITE.WithOpacity(0.3f))), kCtrlTagPeakAvgMeter, "vcontrols");
+    pGraphics->AttachControl(new IVScopeControl<2, kScopeBufferSize*2>(nextCell(), "IVScopeControl", style.WithColor(kFG, COLOR_BLACK)), kCtrlTagScope, "vcontrols");
+    pGraphics->AttachControl(new IVDisplayControl(nextCell(), "IVDisplayControl", style, EDirection::Vertical, -1., 1., 0., 512), kCtrlTagDisplay, "vcontrols");
     pGraphics->AttachControl(new IVLabelControl(nextCell().SubRectVertical(3, 0).GetMidVPadded(10.f), "IVLabelControl"), kNoTag, "vcontrols");
     pGraphics->AttachControl(new IVColorSwatchControl(sameCell().SubRectVertical(3, 1), "IVColorSwatchControl", [](int, IColor){}, style, IVColorSwatchControl::ECellLayout::kHorizontal, {kX1, kX2, kX3}, {"", "", ""}), kNoTag, "vcontrols");
-    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(3, 2), kParamGain, nullptr, "IVNumberBoxControl", style), kNoTag, "vcontrols");
+    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(3, 2), kParamGain, nullptr, "IVNumberBoxControl", style, true, 50.f, 1.f, 100.f, "%0.0f", false), kNoTag, "vcontrols");
     pGraphics->AttachControl(new IVPlotControl(nextCell(), {{COLOR_RED,  [](double x){ return std::sin(x * 6.2);} },
                                                             {COLOR_BLUE, [](double x){ return std::cos(x * 6.2);} },
                                                             {COLOR_GREEN, [](double x){ return x > 0.5;} }
 
                                                             }, 32, "IVPlotControl", style), kNoTag, "vcontrols");
 
+    
+    pGraphics->AttachControl(new IVTabbedPagesControl(nextCell(),
+    {
+      {"1", new IVTabPage([](IVTabPage* pPage, const IRECT& r) {
+        pPage->AddChildControl(new IPanelControl(IRECT(), COLOR_RED));
+      })},
+      {"2", new IVTabPage([](IVTabPage* pPage, const IRECT& r) {
+        pPage->AddChildControl(new IPanelControl(IRECT(), COLOR_GREEN));
+      })},
+      {"3", new IVTabPage([](IVTabPage* pPage, const IRECT& r) {
+        pPage->AddChildControl(new IPanelControl(IRECT(), COLOR_BLUE));
+      })}
+    }, "IVTabbedPagesControl", style), kNoTag, "vcontrols");
+    
     IRECT wideCell;
     wideCell = nextCell().Union(nextCell()).Union(nextCell()).Union(nextCell());
     pGraphics->AttachControl(new ITextControl(wideCell.GetFromTop(20.f), "IVKeyboardControl", style.labelText));
@@ -243,6 +259,31 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     
     //pGraphics->AttachControl(new IVGroupControl("Vector Controls", "vcontrols", 10.f, 30.f, 10.f, 10.f));
 
+    AddLabel("ILambdaControl");
+    pGraphics->AttachControl(new ILambdaControl(sameCell().GetScaledAboutCentre(0.5),
+    [](ILambdaControl* pCaller, IGraphics& g, IRECT& r) {
+      const float radius = r.W();
+      const float x = r.MW();
+      const float y = r.MH();
+      const float rotate = float(pCaller->GetAnimationProgress() * PI);
+      
+      for(int index = 0, limit = 40; index < limit; ++index)
+      {
+        float firstAngle = float ((index * 2 * PI) / limit);
+        float secondAngle = float (((index + 1) * 2 * PI) / limit);
+        
+        g.PathTriangle(x, y,
+                       x + std::sin(firstAngle + rotate) * radius, y + std::cos(firstAngle + rotate) * radius,
+                       x + std::sin(secondAngle + rotate) * radius, y + std::cos(secondAngle + rotate) * radius);
+        
+        if(index % 2)
+          g.PathFill(COLOR_RED);
+        else
+          g.PathFill(pCaller->mMouseInfo.ms.L ? COLOR_VIOLET : COLOR_BLUE);
+      }
+      
+    }, 1000, false));
+    
     #pragma mark IVControl panel -
 
     cellIdx = 31;
@@ -257,17 +298,17 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     {
       pGraphics->AttachControl(new IVSliderControl(sameCell().GetGridCell(slider, 0, 5, 1), [pGraphics, slider](IControl* pCaller){
         SplashClickActionFunc(pCaller);
-        pGraphics->ForControlInGroup("vcontrols", [pCaller, slider](IControl& control) {
+        pGraphics->ForControlInGroup("vcontrols", [pCaller, slider](IControl* pControl) {
           
-          IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
+          IVectorBase* pVControl = pControl->As<IVectorBase>();
           float val = static_cast<float>(pCaller->GetValue());
           
           switch (slider) {
-            case 0 : vcontrol.SetWidgetFrac(val); break;
-            case 1 : vcontrol.SetRoundness(val); break;
-            case 2 : vcontrol.SetShadowOffset(val * 5.f); break;
-            case 3 : vcontrol.SetFrameThickness(val * 5.f); break;
-            case 4 : vcontrol.SetAngle(val * 360.f); break;
+            case 0 : pVControl->SetWidgetFrac(val); break;
+            case 1 : pVControl->SetRoundness(val); break;
+            case 2 : pVControl->SetShadowOffset(val * 5.f); break;
+            case 3 : pVControl->SetFrameThickness(val * 5.f); break;
+            case 4 : pVControl->SetAngle(val * 360.f); break;
             default: break;
           }
         });
@@ -285,17 +326,17 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     {
       pGraphics->AttachControl(new IVToggleControl(toggleRects.GetGridCell(toggle, 0, 5, 1), [pGraphics, toggle](IControl* pCaller){
         SplashClickActionFunc(pCaller);
-        pGraphics->ForControlInGroup("vcontrols", [pCaller, toggle](IControl& control) {
+        pGraphics->ForControlInGroup("vcontrols", [pCaller, toggle](IControl* pControl) {
           
-          IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
+          IVectorBase* pVControl = pControl->As<IVectorBase>();
           bool val = (bool) pCaller->GetValue();
           
           switch (toggle) {
-            case 0 : vcontrol.SetDrawFrame(val); break;
-            case 1 : vcontrol.SetDrawShadows(val); break;
-            case 2 : vcontrol.SetEmboss(val); break;
-            case 3 : vcontrol.SetShowLabel(val); break;
-            case 4 : vcontrol.SetShowValue(val); break;
+            case 0 : pVControl->SetDrawFrame(val); break;
+            case 1 : pVControl->SetDrawShadows(val); break;
+            case 2 : pVControl->SetEmboss(val); break;
+            case 3 : pVControl->SetShowLabel(val); break;
+            case 4 : pVControl->SetShowValue(val); break;
             default: break;
           }
         });
@@ -314,15 +355,15 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
         bool state = pCaller->GetValue() > 0.5f;
         switch (toggle) {
           case 0:
-            pGraphics->ForStandardControlsFunc([pCaller, toggle, state](IControl& control) {
-              if(&control != pCaller)
-                control.SetDisabled(state);
+            pGraphics->ForStandardControlsFunc([pCaller, toggle, state](IControl* pControl) {
+              if(pControl != pCaller)
+                pControl->SetDisabled(state);
             });
             break;
           case 1:
-            pGraphics->ForStandardControlsFunc([pCaller, toggle, state](IControl& control) {
-              if(&control != pCaller && control.GetParamIdx() == kParamGain){
-                control.SetActionFunction(state ? ShowBubbleHorizontalActionFunc : nullptr);
+            pGraphics->ForStandardControlsFunc([pCaller, toggle, state](IControl* pControl) {
+              if(pControl != pCaller && pControl->GetParamIdx() == kParamGain){
+                pControl->SetActionFunction(state ? ShowBubbleHorizontalActionFunc : nullptr);
               }});
             break;
           case 2:
@@ -348,15 +389,15 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     pGraphics->AttachControl(new IVRadioButtonControl(nextCell(), [pGraphics](IControl* pCaller) {
       SplashClickActionFunc(pCaller);
       EVShape shape = (EVShape) pCaller->As<IVRadioButtonControl>()->GetSelectedIdx();
-      pGraphics->ForControlInGroup("vcontrols", [pCaller, shape](IControl& control) {
-        IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-        vcontrol.SetShape(shape);
+      pGraphics->ForControlInGroup("vcontrols", [pCaller, shape](IControl* pControl) {
+        IVectorBase* pVControl = pControl->As<IVectorBase>();
+        pVControl->SetShape(shape);
         });
     }, {"Rect", "Ellipse", "Triangle", "EndsRounded", "AllRounded"}, "Shape", style, EVShape::Ellipse, EDirection::Vertical, 10.f), kNoTag);
 
     auto setColors = [pGraphics](int cell, IColor color) {
-      pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl& control) {
-        dynamic_cast<IVectorBase&>(control).SetColor(static_cast<EVColor>(cell), color);
+      pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl* pControl) {
+        pControl->As<IVectorBase>()->SetColor(static_cast<EVColor>(cell), color);
         });
     };
 
@@ -369,24 +410,24 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     pGraphics->AttachControl(new IVColorSwatchControl(nextCell().SubRectVertical(5, 0), "", setBGColor, style.WithColors({COLOR_GRAY}), IVColorSwatchControl::ECellLayout::kVertical, {kBG}, { "Background" }));
 
     auto setLabelTextColor = [pGraphics](int cell, IColor color) {
-      pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl& control) {
-        IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-        IText newText = vcontrol.GetStyle().labelText.WithFGColor(color);
-        vcontrol.SetStyle(vcontrol.GetStyle().WithLabelText(newText));
-        control.SetText(newText);
-        control.SetDirty(false);
+      pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl* pControl) {
+        IVectorBase* pVControl = pControl->As<IVectorBase>();
+        IText newText = pVControl->GetStyle().labelText.WithFGColor(color);
+        pVControl->SetStyle(pVControl->GetStyle().WithLabelText(newText));
+        pControl->SetText(newText);
+        pControl->SetDirty(false);
         });
     };
     
     pGraphics->AttachControl(new IVColorSwatchControl(sameCell().SubRectVertical(5, 1), "", setLabelTextColor, style.WithColor(kBG, DEFAULT_TEXT_FGCOLOR), IVColorSwatchControl::ECellLayout::kVertical, { kBG }, { "Label Text" }));
 
     auto setValueTextColor = [pGraphics](int cell, IColor color) {
-       pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl& control) {
-         IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-         IText newText = vcontrol.GetStyle().valueText.WithFGColor(color);
-         vcontrol.SetStyle(vcontrol.GetStyle().WithValueText(newText));
-//         control.SetText(newText);
-         control.SetDirty(false);
+       pGraphics->ForControlInGroup("vcontrols", [cell, color](IControl* pControl) {
+         IVectorBase* pVControl = pControl->As<IVectorBase>();
+         IText newText = pVControl->GetStyle().valueText.WithFGColor(color);
+         pVControl->SetStyle(pVControl->GetStyle().WithValueText(newText));
+//         pControl->SetText(newText);
+         pControl->SetDirty(false);
          });
      };
 
@@ -394,75 +435,106 @@ IPlugControls::IPlugControls(const InstanceInfo& info)
     
     auto setLabelTextSize = [pGraphics](IControl* pCaller) {
       float newSize = (float) pCaller->As<IVNumberBoxControl>()->GetRealValue();
-      pGraphics->ForControlInGroup("vcontrols", [newSize](IControl& control) {
-        IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-        IText newText = vcontrol.GetStyle().labelText.WithSize(newSize);
-        vcontrol.SetStyle(vcontrol.GetStyle().WithLabelText(newText));
-        control.OnResize();
-        control.SetDirty(false);
+      pGraphics->ForControlInGroup("vcontrols", [newSize](IControl* pControl) {
+        IVectorBase* pVControl = pControl->As<IVectorBase>();
+        IText newText = pVControl->GetStyle().labelText.WithSize(newSize);
+        pVControl->SetStyle(pVControl->GetStyle().WithLabelText(newText));
+        pControl->OnResize();
+        pControl->SetDirty(false);
       });
     };
     
-    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(5, 3), kNoParameter, setLabelTextSize, "Label Text Size", style, (double) style.labelText.mSize, 12., 100.));
+    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(5, 3).FracRectHorizontal(0.5f), kNoParameter, setLabelTextSize, "Label", style, false, (double) style.labelText.mSize, 12., 100.));
     
     auto setValueTextSize = [pGraphics](IControl* pCaller) {
       float newSize = (float) pCaller->As<IVNumberBoxControl>()->GetRealValue();
-      pGraphics->ForControlInGroup("vcontrols", [newSize](IControl& control) {
-        IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-        IText newText = vcontrol.GetStyle().valueText.WithSize(newSize);
-        vcontrol.SetStyle(vcontrol.GetStyle().WithValueText(newText));
-        control.SetText(newText);
-        control.OnResize();
-        control.SetDirty(false);
+      pGraphics->ForControlInGroup("vcontrols", [newSize](IControl* pControl) {
+        IVectorBase* pVControl = pControl->As<IVectorBase>();
+        IText newText = pVControl->GetStyle().valueText.WithSize(newSize);
+        pVControl->SetStyle(pVControl->GetStyle().WithValueText(newText));
+        pControl->SetText(newText);
+        pControl->OnResize();
+        pControl->SetDirty(false);
       });
     };
     
-    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(5, 4), kNoParameter, setValueTextSize, "Value Text Size", style, (double) style.valueText.mSize, 12., 100.));
+    pGraphics->AttachControl(new IVNumberBoxControl(sameCell().SubRectVertical(5, 3).FracRectHorizontal(0.5f, true), kNoParameter, setValueTextSize, "Value", style, false, (double) style.valueText.mSize, 12., 100.));
 
     auto promptLabelFont = [pGraphics](IControl* pCaller) {
-      WDL_String fileName;
-      WDL_String path;
-      pGraphics->PromptForFile(fileName, path, EFileAction::Open, "ttf");
-      
-      if(fileName.GetLength())
-      {
-        if(pGraphics->LoadFont(fileName.get_filepart(), fileName.Get()))
+      auto completionHandler = [pGraphics](const WDL_String& fileName, const WDL_String& path) {
+        if (fileName.GetLength())
         {
-          pGraphics->ForControlInGroup("vcontrols", [fileName](IControl& control) {
-            IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-            IText newText = vcontrol.GetStyle().labelText.WithFont(fileName.get_filepart());
-            vcontrol.SetStyle(vcontrol.GetStyle().WithLabelText(newText));
-            control.OnResize();
-            control.SetDirty(false);
-          });
+          if (pGraphics->LoadFont(fileName.get_filepart(), fileName.Get()))
+          {
+            pGraphics->ForControlInGroup("vcontrols", [fileName](IControl* pControl) {
+              IVectorBase* pVControl = pControl->As<IVectorBase>();
+              IText newText = pVControl->GetStyle().labelText.WithFont(fileName.get_filepart());
+              pVControl->SetStyle(pVControl->GetStyle().WithLabelText(newText));
+              pControl->OnResize();
+              pControl->SetDirty(false);
+            });
+          }
         }
-      }
+      };
+      
+      WDL_String fileName, path;
+      pGraphics->PromptForFile(fileName, path, EFileAction::Open, "ttf", completionHandler);
     };
     
-    pGraphics->AttachControl(new IVButtonControl(nextCell().SubRectVertical(5, 1), SplashClickActionFunc, "Choose label font...", style))->SetAnimationEndActionFunction(promptLabelFont);
+    pGraphics->AttachControl(new IVButtonControl(sameCell().SubRectVertical(5, 4).FracRectHorizontal(0.5f), SplashClickActionFunc, "font...", style.WithDrawShadows(false)))->SetAnimationEndActionFunction(promptLabelFont);
     
     auto promptValueFont = [pGraphics](IControl* pCaller) {
-      WDL_String fileName;
-      WDL_String path;
-      pGraphics->PromptForFile(fileName, path, EFileAction::Open, "ttf");
-      
-      if(fileName.GetLength())
-      {
-        if(pGraphics->LoadFont(fileName.get_filepart(), fileName.Get()))
+      auto completionHandler = [pGraphics](const WDL_String& fileName, const WDL_String& path){
+        if (fileName.GetLength())
         {
-          pGraphics->ForControlInGroup("vcontrols", [fileName](IControl& control) {
-            IVectorBase& vcontrol = dynamic_cast<IVectorBase&>(control);
-            IText newText = vcontrol.GetStyle().valueText.WithFont(fileName.get_filepart());
-            vcontrol.SetStyle(vcontrol.GetStyle().WithValueText(newText));
-            control.OnResize();
-            control.SetText(newText);
-            control.SetDirty(false);
-          });
+          if (pGraphics->LoadFont(fileName.get_filepart(), fileName.Get()))
+          {
+            pGraphics->ForControlInGroup("vcontrols", [fileName](IControl* pControl) {
+              IVectorBase* pVControl = pControl->As<IVectorBase>();
+              IText newText = pVControl->GetStyle().valueText.WithFont(fileName.get_filepart());
+              pVControl->SetStyle(pVControl->GetStyle().WithValueText(newText));
+              pControl->OnResize();
+              pControl->SetText(newText);
+              pControl->SetDirty(false);
+            });
+          }
         }
-      }
+      };
+      
+      WDL_String fileName, path;
+      pGraphics->PromptForFile(fileName, path, EFileAction::Open, "ttf", completionHandler);
     };
     
-    pGraphics->AttachControl(new IVButtonControl(sameCell().SubRectVertical(5, 2), SplashClickActionFunc, "Choose value font...", style))->SetAnimationEndActionFunction(promptValueFont);
+    pGraphics->AttachControl(new IVButtonControl(sameCell().SubRectVertical(5, 4).FracRectHorizontal(0.5f, true), SplashClickActionFunc, "font...", style.WithDrawShadows(false)))->SetAnimationEndActionFunction(promptValueFont);
+    
+#pragma mark - About Box
+    pGraphics->AttachControl(new IVButtonControl(b.GetPadded(-5).GetFromBRHC(50, 50), SplashClickActionFunc, ICON_FK_INFO_CIRCLE, style.WithLabelText(forkAwesomeText.WithSize(40.f)).WithDrawFrame(false).WithDrawShadows(false), true))
+    ->SetAnimationEndActionFunction([pGraphics](IControl* pCaller){
+      pGraphics->GetControlWithTag(kCtrlTagAboutBox)->As<IAboutBoxControl>()->Show();
+    });
+    
+    pGraphics->AttachControl(new IAboutBoxControl(b,
+            COLOR_BLACK.WithOpacity(0.95),
+            // AttachFunc
+            [](IContainerBase* pParent, const IRECT& r) {
+              pParent->AddChildControl(new ITextControl(IRECT(), "IPlugControls Example", {DEFAULT_TEXT_SIZE * 5, COLOR_WHITE}));
+              WDL_String versionStr {"Version "};
+              versionStr.Append(PLUG_VERSION_STR);
+              pParent->AddChildControl(new IVLabelControl(IRECT(), versionStr.Get()));
+              pParent->AddChildControl(new IVLabelControl(IRECT(), "IAboutBoxControl"));
+              pParent->AddChildControl(new IURLControl(IRECT(),
+                                                        "https://iplug2.github.io",
+                                                        "https://iplug2.github.io", {DEFAULT_TEXT_SIZE, COLOR_WHITE}));
+            },
+            // ResizeFunc
+            [](IContainerBase* pParent, const IRECT& r) {
+              const auto logo = r.GetFromTop(300).GetCentredInside(r.W(), 100);
+              const auto links = logo.GetVShifted(100);
+              pParent->GetChild(0)->SetTargetAndDrawRECTs(logo);
+              pParent->GetChild(1)->SetTargetAndDrawRECTs(links.SubRectVertical(4, 0));
+              pParent->GetChild(2)->SetTargetAndDrawRECTs(links.SubRectVertical(4, 2));
+              pParent->GetChild(3)->SetTargetAndDrawRECTs(links.SubRectVertical(4, 3));
+            }), kCtrlTagAboutBox)->Hide(true);
   };
 #endif
 }
@@ -486,6 +558,13 @@ void IPlugControls::OnMidiMsgUI(const IMidiMsg& msg)
     }
   }
 }
+
+void IPlugControls::OnUIClose()
+{
+  // store the background pattern. No modifications to other controls are stored, and this would also need to be serialized in plugin state, for recall!
+  mBGControlPattern = GetUI()->GetBackgroundControl()->As<IPanelControl>()->GetPattern();
+}
+
 #endif
 
 #if IPLUG_DSP
@@ -495,10 +574,16 @@ void IPlugControls::OnIdle()
   mMeterSender.TransmitData(*this);
   mRTTextSender.TransmitData(*this);
   mDisplaySender.TransmitData(*this);
-
+  mPeakAvgMeterSender.TransmitData(*this);
+  
   float val = std::fabs(mLastOutputData.vals[0]);
   SendControlValueFromDelegate(kCtrlTagRedLED, std::copysign(val, mLastOutputData.vals[0]));
   SendControlValueFromDelegate(kCtrlTagGreenLED, std::copysign(val, -mLastOutputData.vals[0]));
+}
+
+void IPlugControls::OnReset()
+{
+  mPeakAvgMeterSender.Reset(GetSampleRate());
 }
 
 void IPlugControls::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
@@ -517,6 +602,7 @@ void IPlugControls::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
   mDisplaySender.ProcessBlock(outputs, nFrames, kCtrlTagDisplay);
   mScopeSender.ProcessBlock(outputs, nFrames, kCtrlTagScope);
   mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
+  mPeakAvgMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagPeakAvgMeter);
 
   mLastOutputData.vals[0] = (float) outputs[0][0]; // just take first value in block
 

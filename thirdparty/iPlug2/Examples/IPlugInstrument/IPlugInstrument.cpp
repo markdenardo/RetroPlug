@@ -3,7 +3,7 @@
 #include "LFO.h"
 
 IPlugInstrument::IPlugInstrument(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPrograms))
+: iplug::Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
   GetParam(kParamGain)->InitDouble("Gain", 100., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 30.);
@@ -19,7 +19,7 @@ IPlugInstrument::IPlugInstrument(const InstanceInfo& info)
     
 #if IPLUG_EDITOR // http://bit.ly/2S64BDd
   mMakeGraphicsFunc = [&]() {
-    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
+    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
   };
   
   mLayoutFunc = [&](IGraphics* pGraphics) {
@@ -50,17 +50,13 @@ IPlugInstrument::IPlugInstrument(const InstanceInfo& info)
     pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(1, 1, 4).GetMidHPadded(30.), kParamDecay, "Decay"));
     pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(2, 1, 4).GetMidHPadded(30.), kParamSustain, "Sustain"));
     pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(3, 1, 4).GetMidHPadded(30.), kParamRelease, "Release"));
-    pGraphics->AttachControl(new IVMeterControl<2>(controls.GetFromRight(100).GetPadded(-30), ""), kCtrlTagMeter);
+    pGraphics->AttachControl(new IVLEDMeterControl<2>(controls.GetFromRight(100).GetPadded(-30)), kCtrlTagMeter);
     
     pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateHz, "Rate"), kNoTag, "LFO")->Hide(true);
     pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateTempo, "Rate"), kNoTag, "LFO")->DisablePrompt(false);
     pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 1, 2, 3).GetCentredInside(60), kParamLFODepth, "Depth"), kNoTag, "LFO");
     pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 2, 2, 3).GetCentredInside(60), kParamLFOShape, "Shape"), kNoTag, "LFO")->DisablePrompt(false);
-    pGraphics->AttachControl(new IVSlideSwitchControl(lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20), kParamLFORateMode, "Sync", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false), false), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](IControl* pControl) {
-      bool sync = pControl->GetValue() > 0.5;
-      pGraphics->HideControl(kParamLFORateHz, sync);
-      pGraphics->HideControl(kParamLFORateTempo, !sync);
-    });
+    pGraphics->AttachControl(new IVSlideSwitchControl(lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20), kParamLFORateMode, "Sync", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false), false), kNoTag, "LFO");
     pGraphics->AttachControl(new IVDisplayControl(lfoPanel.GetGridCell(1, 1, 2, 3).Union(lfoPanel.GetGridCell(1, 2, 2, 3)), "", DEFAULT_STYLE, EDirection::Horizontal, 0.f, 1.f, 0.f, 1024), kCtrlTagLFOVis, "LFO");
     
     pGraphics->AttachControl(new IVGroupControl("LFO", "LFO", 10.f, 20.f, 10.f, 10.f));
@@ -72,18 +68,18 @@ IPlugInstrument::IPlugInstrument(const InstanceInfo& info)
         pGraphics->GetControlWithTag(kCtrlTagKeyboard)->Hide(hide = !hide);
         pGraphics->Resize(PLUG_WIDTH, hide ? PLUG_HEIGHT / 2 : PLUG_HEIGHT, pGraphics->GetDrawScale());
     });
-#ifdef OS_IOS
-    if(!IsAuv3AppExtension())
-    {
-      pGraphics->AttachControl(new IVButtonControl(b.GetFromTRHC(100, 100), [pGraphics](IControl* pCaller) {
-                               dynamic_cast<IGraphicsIOS*>(pGraphics)->LaunchBluetoothMidiDialog(pCaller->GetRECT().L, pCaller->GetRECT().MH());
-                               SplashClickActionFunc(pCaller);
-                             }, "BTMIDI"));
-    }
-#endif
+//#ifdef OS_IOS
+//    if(!IsOOPAuv3AppExtension())
+//    {
+//      pGraphics->AttachControl(new IVButtonControl(b.GetFromTRHC(100, 100), [pGraphics](IControl* pCaller) {
+//                               dynamic_cast<IGraphicsIOS*>(pGraphics)->LaunchBluetoothMidiDialog(pCaller->GetRECT().L, pCaller->GetRECT().MH());
+//                               SplashClickActionFunc(pCaller);
+//                             }, "BTMIDI"));
+//    }
+//#endif
     
     pGraphics->SetQwertyMidiKeyHandlerFunc([pGraphics](const IMidiMsg& msg) {
-                                              dynamic_cast<IVKeyboardControl*>(pGraphics->GetControlWithTag(kCtrlTagKeyboard))->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
+                                              pGraphics->GetControlWithTag(kCtrlTagKeyboard)->As<IVKeyboardControl>()->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
                                            });
   };
 #endif
@@ -106,6 +102,7 @@ void IPlugInstrument::OnIdle()
 void IPlugInstrument::OnReset()
 {
   mDSP.Reset(GetSampleRate(), GetBlockSize());
+  mMeterSender.Reset(GetSampleRate());
 }
 
 void IPlugInstrument::ProcessMidiMsg(const IMidiMsg& msg)
@@ -138,6 +135,19 @@ handle:
 void IPlugInstrument::OnParamChange(int paramIdx)
 {
   mDSP.SetParam(paramIdx, GetParam(paramIdx)->Value());
+}
+
+void IPlugInstrument::OnParamChangeUI(int paramIdx, EParamSource source)
+{
+  if (auto pGraphics = GetUI())
+  {
+    if (paramIdx == kParamLFORateMode)
+    {
+      const auto sync = GetParam(kParamLFORateMode)->Bool();
+      pGraphics->HideControl(kParamLFORateHz, sync);
+      pGraphics->HideControl(kParamLFORateTempo, !sync);
+    }
+  }
 }
 
 bool IPlugInstrument::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)

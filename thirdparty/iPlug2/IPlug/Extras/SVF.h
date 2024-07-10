@@ -55,7 +55,7 @@ public:
 
     const double g = freqCPS;
     const double k = 1.0 / Q;
-    const double A = std::pow(10., gain / 40.);
+//    const double A = std::pow(10., gain / 40.);
 
     static double minLogHz = std::log10(minHz);
     static double maxLogHz = std::log10(maxHz);
@@ -85,11 +85,11 @@ public:
     return magnitude;
   }
 
-  void SetFreqCPS(double freqCPS) { mNewState.freq = Clip(freqCPS, 10, 20000.); }
+  void SetFreqCPS(double freqCPS) { mNewState.freq = Clip(freqCPS, 10.0, 20000.); }
 
-  void SetQ(double Q) { mNewState.Q = Clip(Q, 0.1, 100.); }
+  void SetQ(double Q) { mNewState.Q = Clip(Q, 0.1, 100.0); }
 
-  void SetGain(double gainDB) { mNewState.gain = Clip(gainDB, -36, 36.); }
+  void SetGain(double gainDB) { mNewState.gain = Clip(gainDB, -36.0, 36.0); }
 
   void SetMode(EMode mode) { mNewState.mode = mode; }
   
@@ -269,9 +269,9 @@ private:
     {
       return !(mode == other.mode && freq == other.freq && Q == other.Q && gain == other.gain && sampleRate == other.sampleRate);
     }
-  };
+  } WDL_FIXALIGN;
 
   Settings mState, mNewState;
-};
+} WDL_FIXALIGN;
 
 END_IPLUG_NAMESPACE

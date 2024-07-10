@@ -4,9 +4,9 @@
 #include "lice.h"
 
 #define GLEW_STATIC
-#include "glew/include/gl/glew.h"
-#include "glew/include/gl/wglew.h"
-#include "glew/include/gl/wglext.h"
+#include "glew/include/GL/glew.h"
+#include "glew/include/GL/wglew.h"
+#include "glew/include/GL/WGLEXT.H"
 
 // GL context functions
 // opening and managing GL context is handled behind the scenes

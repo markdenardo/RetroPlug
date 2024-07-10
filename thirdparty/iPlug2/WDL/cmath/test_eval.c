@@ -28,7 +28,7 @@
   reduced precisions for ansi c
 */
 
-#include "stdio.h"
+#include "../../../SameBoy-old/Windows/stdio.h"
 #include "complex_number.h"
 #include "horner.h"
 #include "durand_kerner.h"

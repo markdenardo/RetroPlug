@@ -27,11 +27,6 @@
 
 static HMENU g_swell_defaultmenu,g_swell_defaultmenumodal;
 
-void (*SWELL_DDrop_onDragLeave)();
-void (*SWELL_DDrop_onDragOver)(POINT pt);
-void (*SWELL_DDrop_onDragEnter)(void *hGlobal, POINT pt);
-const char* (*SWELL_DDrop_getDroppedFileTargetPath)(const char* extension);
-
 bool SWELL_owned_windows_levelincrease=false;
 
 #include "swell-internal.h"
@@ -59,7 +54,7 @@ static WDL_PtrList<modalDlgRet> s_modalDialogs;
 
 bool IsModalDialogBox(HWND hwnd)
 {
-  if (!hwnd) return false;
+  if (WDL_NOT_NORMALLY(!hwnd)) return false;
   int a = s_modalDialogs.GetSize();
   while (a-- > 0)
   {
@@ -110,7 +105,7 @@ static int s_last_dlgret;
 
 void EndDialog(HWND wnd, int ret)
 {   
-  if (!wnd) return;
+  if (WDL_NOT_NORMALLY(!wnd)) return;
   
   int a = s_modalDialogs.GetSize();
   while (a-->0)
@@ -133,12 +128,12 @@ void EndDialog(HWND wnd, int ret)
       if (wnd->m_oswindow && wnd->m_visible)
       {
         swell_dlg_destroyspare();
-        GetWindowRect(wnd,&s_spare_rect);
+        s_spare_rect = wnd->m_position;
         s_spare_style = wnd->m_style;
         s_spare = wnd->m_oswindow;
         wnd->m_oswindow = NULL;
         s_spare_timer = SetTimer(NULL,0,
-                             swell_app_is_inactive ? 500 : 100,
+                             swell_is_app_inactive()>0 ? 500 : 100,
                              spareTimer);
       }
     #endif
@@ -167,6 +162,11 @@ int SWELL_DialogBox(SWELL_DialogResourceIndex *reshead, const char *resid, HWND 
   if (hwnd)
   {
     hwnd->Retain();
+
+    void SWELL_OnNavigationFocus(HWND ch);
+    HWND SWELL_GetFocusedChild(HWND h);
+    SWELL_OnNavigationFocus(SWELL_GetFocusedChild(hwnd));
+
     ReleaseCapture(); // force end of any captures
 
     WDL_PtrKeyedArray<int> restwnds;
@@ -226,7 +226,21 @@ int SWELL_DialogBox(SWELL_DialogResourceIndex *reshead, const char *resid, HWND 
         swell_oswindow_resize(w, flags, hwnd->m_position);
       }
       hwnd->m_oswindow = w;
+
+      if (!flags)
+      {
+        hwnd->m_has_had_position = true;
+        hwnd->m_position = s_spare_rect;
+        if (!hwnd->m_hashaddestroy)
+        {
+          void swell_recalcMinMaxInfo(HWND hwnd);
+          swell_recalcMinMaxInfo(hwnd);
+        }
+      }
+      swell_oswindow_focus(hwnd);
+
       ShowWindow(hwnd,SW_SHOWNA);
+      InvalidateRect(hwnd,NULL,FALSE);
     }
     else  
     {
@@ -299,7 +313,12 @@ HWND SWELL_CreateDialog(SWELL_DialogResourceIndex *reshead, const char *resid, H
   else if (!p && !parent) h->m_style |= WS_CAPTION;
   else if (parent && (!p || (p->windowTypeFlags&SWELL_DLG_WS_CHILD))) h->m_style |= WS_CHILD;
 
-  if (p) h->m_style |= p->windowTypeFlags & (WS_CLIPSIBLINGS);
+  if (p)
+  {
+    h->m_style |= p->windowTypeFlags & (WS_CLIPSIBLINGS);
+    if (p->windowTypeFlags&SWELL_DLG_WS_DROPTARGET)
+      h->m_exstyle|=WS_EX_ACCEPTFILES;
+  }
 
   h->Retain();
 

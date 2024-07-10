@@ -12,7 +12,7 @@
 #include <AudioUnit/AudioUnit.h>
 #include <AudioUnit/AUCocoaUIView.h>
 
-#include "config.h"   // This is your plugin's config.h.
+#include "../../../../config/config.h"   // This is your plugin's config.h.
 #include "IPlugAPIBase.h"
 
 using namespace iplug;
@@ -71,7 +71,7 @@ static const AudioUnitPropertyID kIPlugObjectPropertyID = UINT32_MAX-100;
   return 0;
 }
 
-- (NSString *) description
+- (NSString*) description
 {
   return [NSString stringWithCString:PLUG_NAME " View" encoding:NSUTF8StringEncoding];
 }

@@ -6,7 +6,7 @@
 
 using namespace iplug;
 
-const int kNumPrograms = 3;
+const int kNumPresets = 3;
 
 enum EParams
 {
@@ -19,6 +19,7 @@ enum EMsgTags
   kMsgTagButton1 = 0,
   kMsgTagButton2 = 1,
   kMsgTagButton3 = 2,
+  kMsgTagBinaryTest = 3
 };
 
 enum EControlTags
@@ -32,6 +33,7 @@ public:
   IPlugWebUI(const InstanceInfo& info);
   
   void ProcessBlock(sample** inputs, sample** outputs, int nFrames) override;
+  void ProcessMidiMsg(const IMidiMsg& msg) override;
   void OnReset() override;
   void OnIdle() override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;

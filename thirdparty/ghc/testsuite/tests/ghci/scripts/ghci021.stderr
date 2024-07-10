@@ -1,0 +1,3 @@
+<no location info>: error: [GHC-82272]
+    module ‘ThisDoesNotExist’ cannot be found locally
+

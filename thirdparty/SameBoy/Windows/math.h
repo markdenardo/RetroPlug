@@ -1,5 +1,5 @@
 #pragma once
-#include_next <math.h>
+#include_next "math.h"
 #ifndef __MINGW32__
 /* "Old" (Pre-2015) Windows headers/libc don't have round. */
 static inline double round(double f)

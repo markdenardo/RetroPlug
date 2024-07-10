@@ -1,0 +1,7 @@
+parsePlugin()
+interfacePlugin: Prelude
+interfacePlugin: GHC.Internal.Base
+interfacePlugin: GHC.Internal.Float
+interfacePlugin: GHC.Prim.Ext
+typeCheckPlugin (rn)
+typeCheckPlugin (tc)

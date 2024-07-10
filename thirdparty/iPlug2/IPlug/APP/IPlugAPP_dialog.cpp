@@ -9,8 +9,8 @@
 */
 
 #include "IPlugAPP_host.h"
-#include "config.h"
-#include "resource.h"
+#include "../../../../config/config.h"
+#include "../../../../resources/resource.h"
 
 #ifdef OS_WIN
 #include "asio.h"
@@ -21,10 +21,11 @@
 
 using namespace iplug;
 
-#if defined _DEBUG && !defined NO_IGRAPHICS
+#if !defined NO_IGRAPHICS
 #include "IGraphics.h"
 using namespace igraphics;
 #endif
+
 
 // check the input and output devices, find matching srs
 void IPlugAPPHost::PopulateSampleRateList(HWND hwndDlg, RtAudio::DeviceInfo* inputDevInfo, RtAudio::DeviceInfo* outputDevInfo)
@@ -459,15 +460,20 @@ WDL_DLGRET IPlugAPPHost::PreferencesDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wPar
           break;
 
         case IDC_BUTTON_OS_DEV_SETTINGS:
-          if (HIWORD(wParam) == BN_CLICKED)
+          if (HIWORD(wParam) == BN_CLICKED) {
             #ifdef OS_WIN
             if( (_this->mState.mAudioDriverType == kDeviceASIO) && (_this->mDAC->isStreamRunning() == true)) // TODO: still not right
               ASIOControlPanel();
             #elif defined OS_MAC
-            system("open \"/Applications/Utilities/Audio MIDI Setup.app\"");
+            if(SWELL_GetOSXVersion() >= 0x1200) {
+              system("open \"/System/Applications/Utilities/Audio MIDI Setup.app\"");
+            } else {
+              system("open \"/Applications/Utilities/Audio MIDI Setup.app\"");
+            }
             #else
               #error NOT IMPLEMENTED
             #endif
+          }
           break;
 
         case IDC_COMBO_MIDI_IN_DEV:
@@ -527,11 +533,10 @@ static void ClientResize(HWND hWnd, int nWidth, int nHeight)
   ptDiff.y = (rcWindow.bottom - rcWindow.top) - rcClient.bottom;
   
   SetWindowPos(hWnd, 0, x, y, nWidth + ptDiff.x, nHeight + ptDiff.y, 0);
-//  MoveWindow(hWnd, x, y, nWidth + ptDiff.x, nHeight + ptDiff.y, FALSE);
 }
 
 #ifdef OS_WIN 
-extern int GetScaleForHWND(HWND hWnd);
+extern float GetScaleForHWND(HWND hWnd);
 #endif
 
 //static
@@ -555,12 +560,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
       width = pPlug->GetEditorWidth();
       height = pPlug->GetEditorHeight();
 
-      int scale = 1;
-      #ifdef OS_WIN 
-      scale = GetScaleForHWND(gHWND);
-      #endif
-
-      ClientResize(hwndDlg, width * scale, height * scale);
+      ClientResize(hwndDlg, width, height);
 
       ShowWindow(hwndDlg, SW_SHOW);
       return 1;
@@ -637,7 +637,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
             {
               bool enabled = pGraphics->LiveEditEnabled();
               pGraphics->EnableLiveEdit(!enabled);
-              CheckMenuItem(GET_MENU(), ID_LIVE_EDIT, MF_BYCOMMAND | enabled ? MF_UNCHECKED : MF_CHECKED);
+              CheckMenuItem(GET_MENU(), ID_LIVE_EDIT, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
             }
           }
           
@@ -655,7 +655,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
             {
               bool enabled = pGraphics->ShowAreaDrawnEnabled();
               pGraphics->ShowAreaDrawn(!enabled);
-              CheckMenuItem(GET_MENU(), ID_SHOW_DRAWN, MF_BYCOMMAND | enabled ? MF_UNCHECKED : MF_CHECKED);
+              CheckMenuItem(GET_MENU(), ID_SHOW_DRAWN, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
             }
           }
           
@@ -673,7 +673,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
             {
               bool enabled = pGraphics->ShowControlBoundsEnabled();
               pGraphics->ShowControlBounds(!enabled);
-              CheckMenuItem(GET_MENU(), ID_SHOW_BOUNDS, MF_BYCOMMAND | enabled ? MF_UNCHECKED : MF_CHECKED);
+              CheckMenuItem(GET_MENU(), ID_SHOW_BOUNDS, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
             }
           }
           
@@ -691,7 +691,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
             {
               bool enabled = pGraphics->ShowingFPSDisplay();
               pGraphics->ShowFPSDisplay(!enabled);
-              CheckMenuItem(GET_MENU(), ID_SHOW_FPS, MF_BYCOMMAND | enabled ? MF_UNCHECKED : MF_CHECKED);
+              CheckMenuItem(GET_MENU(), ID_SHOW_FPS, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
             }
           }
           
@@ -700,6 +700,70 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
 #endif
       }
       return 0;
+    case WM_GETMINMAXINFO:
+    {
+      if(!pAppHost)
+        return 1;
+      
+      IPlugAPP* pPlug = pAppHost->GetPlug();
+
+      MINMAXINFO* mmi = (MINMAXINFO*) lParam;
+      mmi->ptMinTrackSize.x = pPlug->GetMinWidth();
+      mmi->ptMinTrackSize.y = pPlug->GetMinHeight();
+      mmi->ptMaxTrackSize.x = pPlug->GetMaxWidth();
+      mmi->ptMaxTrackSize.y = pPlug->GetMaxHeight();
+
+#ifdef OS_WIN 
+      float scale = GetScaleForHWND(hwndDlg);
+      mmi->ptMinTrackSize.x = static_cast<LONG>(static_cast<float>(mmi->ptMinTrackSize.x) * scale);
+      mmi->ptMinTrackSize.y = static_cast<LONG>(static_cast<float>(mmi->ptMinTrackSize.y) * scale);
+      mmi->ptMaxTrackSize.x = static_cast<LONG>(static_cast<float>(mmi->ptMaxTrackSize.x) * scale);
+      mmi->ptMaxTrackSize.y = static_cast<LONG>(static_cast<float>(mmi->ptMaxTrackSize.y) * scale);
+#endif
+      
+      return 0;
+    }
+#ifdef OS_WIN
+    case WM_DPICHANGED:
+    {
+      WORD dpi = HIWORD(wParam);
+      RECT* rect = (RECT*)lParam;
+      float scale = GetScaleForHWND(hwndDlg);
+
+      POINT ptDiff;
+      RECT rcClient;
+      RECT rcWindow;
+
+      GetClientRect(hwndDlg, &rcClient);
+      GetWindowRect(hwndDlg, &rcWindow);
+
+      ptDiff.x = (rcWindow.right - rcWindow.left) - rcClient.right;
+      ptDiff.y = (rcWindow.bottom - rcWindow.top) - rcClient.bottom;
+
+#ifndef NO_IGRAPHICS
+      IGEditorDelegate* pPlug = dynamic_cast<IGEditorDelegate*>(pAppHost->GetPlug());
+
+      if (pPlug)
+      {
+        IGraphics* pGraphics = pPlug->GetUI();
+
+        if (pGraphics)
+        {
+          pGraphics->SetScreenScale(scale);
+        }
+      }
+#else
+      IEditorDelegate* pPlug = dynamic_cast<IEditorDelegate*>(pAppHost->GetPlug());
+#endif
+
+      int w = pPlug->GetEditorWidth(); 
+      int h = pPlug->GetEditorHeight();
+
+      SetWindowPos(hwndDlg, 0, rect->left, rect->top, w + ptDiff.x, h + ptDiff.y, 0);
+
+      return 0;
+    }
+#endif
     case WM_SIZE:
     {
       IPlugAPP* pPlug = pAppHost->GetPlug();
@@ -711,11 +775,11 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
       {
         RECT r;
         GetClientRect(hwndDlg, &r);
-        int scale = 1;
+        float scale = 1.f;
         #ifdef OS_WIN 
         scale = GetScaleForHWND(hwndDlg);
         #endif
-        pPlug->OnParentWindowResize(r.right / scale, r.bottom / scale);
+        pPlug->OnParentWindowResize(static_cast<int>(r.right / scale), static_cast<int>(r.bottom / scale));
         return 1;
       }
       default:

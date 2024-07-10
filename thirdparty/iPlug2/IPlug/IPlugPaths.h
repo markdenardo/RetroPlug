@@ -27,18 +27,13 @@ using PluginIDType = HMODULE;
 using PluginIDType = void *;
 #endif
 
-#if defined OS_WIN
-#include <windows.h>
- // Unicode helpers
-void UTF8ToUTF16(wchar_t* utf16Str, const char* utf8Str, int maxLen);
-void UTF16ToUTF8(WDL_String& utf8Str, const wchar_t* utf16Str);
-#endif
-
-/** @param path WDL_String reference where the path will be put on success or empty string on failure */
+/** Get the path to the host binary 
+* @param path WDL_String reference where the path will be put on success or empty string on failure */
 extern void HostPath(WDL_String& path, const char* bundleID = 0);
 
-/** @param path WDL_String reference where the path will be put on success or empty string on failure
- *  @param pExtra This should either be a const char* to bundleID (macOS) or an HMODULE handle (windows) */
+/** Get the path to the plug-in binary 
+ * @param path WDL_String reference where the path will be put on success or empty string on failure
+ * @param pExtra This should either be a const char* to bundleID (macOS) or an HMODULE handle (windows) */
 extern void PluginPath(WDL_String& path, PluginIDType pExtra);
 
 /** Get the path to the plug-in bundle resource path. On macOS and iOS if this is called in an AUv3 app extension it will return the bundle of the parent app
@@ -58,9 +53,6 @@ extern void UserHomePath(WDL_String& path);
  * @param isSystem Set \c true if you want to obtain the system-wide path, otherwise the path will be in the user's home folder */
 extern void AppSupportPath(WDL_String& path, bool isSystem = false);
 
-/** @param path WDL_String reference where the path will be put on success or empty string on failure */
-extern void SandboxSafeAppSupportPath(WDL_String& path, const char* appGroupID = "");
-
 /** @param path WDL_String reference where the path will be put on success or empty string on failure
  * @param mfrName CString to specify the manufacturer name, which will be the top level folder for .vstpreset files for this manufacturer's product
  * @param pluginName CString to specify the plug-in name, which will be the sub folder (beneath mfrName) in which the .vstpreset files are located
@@ -71,6 +63,9 @@ extern void VST3PresetsPath(WDL_String& path, const char* mfrName, const char* p
  * @param path WDL_String reference where the path will be put on success or empty string on failure
  * @param pluginName CString to specify the plug-in name (BUNDLE_NAME from config.h can be used here) */
 extern void INIPath(WDL_String& path, const char* pluginName);
+
+/** Get the path to the folder where the Plug-in's ICoreWebView2 userdata folder should be (Windows WebView only)*/
+extern void WebViewCachePath(WDL_String& path);
 
 /** Find the absolute path of a resource based on it's file name (e.g. “background.png”) and type (e.g. “png”), or in the case of windows,
  * confirm the existence of a particular resource in the binary. If it fails to find the resource with the binary it will test the fileNameOrResID argument
@@ -83,7 +78,7 @@ extern void INIPath(WDL_String& path, const char* pluginName);
  *
  * @param fileNameOrResID The filename or resourceID including extension. If no resource is found this argument is tested as an absolute path.
  * @param type The resource type (file extension) in lower or upper case, e.g. ttf or TTF for a truetype font
- * @param result WDL_String which will either contain the full path to the resource on disk, or the ful Windows resourceID on success
+ * @param result WDL_String which will either contain the full path to the resource on disk, or the full Windows resourceID on success
  * @return \c true on success */
 extern EResourceLocation LocateResource(const char* fileNameOrResID, const char* type, WDL_String& result, const char* bundleID, void* pHInstance, const char* sharedResourcesSubPath);
 
@@ -92,12 +87,24 @@ extern EResourceLocation LocateResource(const char* fileNameOrResID, const char*
  * @return const void pointer to the data if successfull on windows. Returns nullptr if unsuccessfull or on platforms other than windows */
 extern const void* LoadWinResource(const char* resID, const char* type, int& sizeInBytes, void* pHInstance);
 
+#if defined OS_MAC || defined OS_IOS
+
 /** @return \c true if the app is sandboxed (and therefore file access etc is restricted) */
 extern bool AppIsSandboxed();
 
-#ifdef OS_IOS
-extern bool IsAuv3AppExtension();
+/** @param path WDL_String reference where the path will be put on success or empty string on failure */
+extern void AppGroupContainerPath(WDL_String& path, const char* appGroupID);
+
+/** @param path WDL_String reference where the path will be put on success or empty string on failure */
+extern void SharedMusicPath(WDL_String& path);
+
+/** @return \c true if XPC AUv2 host (Typically Logic/Garageband on Apple Silicon)  */
+extern bool IsXPCAuHost();
+
+/** @return \c true if in an out-of-process AUv3  */
+extern bool IsOOPAuv3AppExtension();
+
 #endif
-  
+
 END_IPLUG_NAMESPACE
 

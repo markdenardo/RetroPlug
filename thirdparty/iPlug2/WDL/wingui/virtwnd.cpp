@@ -451,7 +451,7 @@ void WDL_VWnd_Painter::GetPaintInfo(RECT *rclip, int *xoffsdraw, int *yoffsdraw)
 
 void WDL_VWnd_Painter::tintRect(LICE_IBitmap *bmOut, const RECT *clipr, int xoffs, int yoffs, bool isCopy)
 {
-  if (m_bgbmtintcolor>=0)
+  if (m_bgbmtintcolor>=0 || isCopy)
   {
     if (isCopy)
     {
@@ -620,12 +620,15 @@ WDL_VWnd::WDL_VWnd()
   m_lastmouseidx=-1;
   m_userdata=0;
   m_curPainter=0;
+  m_focused_child = -2;
 }
 
 WDL_VWnd::~WDL_VWnd() 
 { 
   if (m_children) 
   {
+    WDL_VWnd *cap = m_children->Get(m_captureidx);
+    if (cap) cap->OnCaptureLost();
     m_children->Empty(true); 
     delete m_children;
   }
@@ -735,8 +738,10 @@ void WDL_VWnd::SetChildPosition(WDL_VWnd *ch, int pos)
       if (pos>x) pos--;
       if (pos != x)
       {
+        WDL_VWnd * const cap = m_children->Get(m_captureidx);
         m_children->Delete(x);
         m_children->Insert(pos,ch);
+        if (cap) m_captureidx = m_children->Find(cap);
       }
       return;
     }
@@ -750,8 +755,15 @@ void WDL_VWnd::AddChild(WDL_VWnd *wnd, int pos)
 
   wnd->SetParent(this);
   if (!m_children) m_children=new WDL_PtrList<WDL_VWnd>;
-  if (pos<0||pos>=m_children->GetSize()) m_children->Add(wnd);
-  else m_children->Insert(pos,wnd);
+  if (pos<0||pos>=m_children->GetSize())
+  {
+    m_children->Add(wnd);
+  }
+  else
+  {
+    m_children->Insert(pos,wnd);
+    if (pos <= m_captureidx) m_captureidx++;
+  }
   if (m__iaccess) m__iaccess->ClearCaches();
 }
 
@@ -774,11 +786,17 @@ void WDL_VWnd::RemoveChild(WDL_VWnd *wnd, bool dodel)
   int idx=m_children ? m_children->Find(wnd) : -1;
   if (idx>=0) 
   {
-    if (!dodel)
+    if (idx == m_captureidx)
     {
-      WDL_VWnd *ch = m_children->Get(idx);
-      if (ch) ch->SetParent(NULL);
+      wnd->OnCaptureLost();
+      m_captureidx = -1;
     }
+    else if (idx < m_captureidx)
+    {
+      m_captureidx--;
+    }
+
+    if (!dodel) wnd->SetParent(NULL);
     m_children->Delete(idx,dodel);
   }
   if (m__iaccess) m__iaccess->ClearCaches();
@@ -790,7 +808,7 @@ void WDL_VWnd::OnPaint(LICE_IBitmap *drawbm, int origin_x, int origin_y, RECT *c
   if (m_children) for (x = m_children->GetSize()-1; x >=0; x --)
   {
     WDL_VWnd *ch=m_children->Get(x);
-    if (ch->IsVisible())
+    if (PrepareToDrawChild(ch,0) && ch->IsVisible())
     {
       RECT re;
       ch->GetPosition(&re);
@@ -827,7 +845,7 @@ void WDL_VWnd::OnPaintOver(LICE_IBitmap *drawbm, int origin_x, int origin_y, REC
   if (m_children) for (x = m_children->GetSize()-1; x >=0; x --)
   {
     WDL_VWnd *ch=m_children->Get(x);
-    if (ch->IsVisible() && ch->WantsPaintOver())
+    if (PrepareToDrawChild(ch,1) && ch->IsVisible() && ch->WantsPaintOver())
     {
       RECT re;
       ch->GetPosition(&re);
@@ -872,6 +890,9 @@ void WDL_VWnd::RemoveAllChildren(bool dodel)
 {
   if (m_children) 
   {
+    WDL_VWnd *cap = m_children->Get(m_captureidx);
+    if (cap) cap->OnCaptureLost();
+    m_captureidx = -1;
     if (!dodel) // update parent pointers
     {
       int x;
@@ -891,7 +912,7 @@ WDL_VWnd *WDL_VWnd::VirtWndFromPoint(int xpos, int ypos, int maxdepth)
   if (m_children) for (x = 0; x < m_children->GetSize(); x++)
   {
     WDL_VWnd *wnd=m_children->Get(x);
-    if (wnd->IsVisible())
+    if (wnd->IsVisible() && !wnd->DoNotHitTest())
     {
       RECT r;
       wnd->GetPosition(&r);
@@ -984,31 +1005,12 @@ void WDL_VWnd::OnMouseMove(int xpos, int ypos)
   if (!wnd) 
   {
     wnd=VirtWndFromPoint(xpos,ypos,0);
-    if (wnd) // todo: stuff so if the mouse goes out of the window completely, the virtualwnd gets notified
-    {
-      int idx=m_children->Find(wnd);
-      if (idx != m_lastmouseidx)
-      {
-        WDL_VWnd *t=m_children->Get(m_lastmouseidx);
-        if (t)
-        {
-          RECT r;
-          t->GetPosition(&r);
-          t->OnMouseMove(xpos-r.left,ypos-r.top);
-        }
-        if (chk.isOK()) m_lastmouseidx=idx;
-      }
-    }
-    else
+    int idx = wnd ? m_children->Find(wnd) : -1;
+    if (idx != m_lastmouseidx)
     {
       WDL_VWnd *t=m_children->Get(m_lastmouseidx);
-      if (t)
-      {
-        RECT r;
-        t->GetPosition(&r);
-        t->OnMouseMove(xpos-r.left,ypos-r.top);
-      }
-      if (chk.isOK()) m_lastmouseidx=-1;
+      if (t) t->OnMouseMove(-1000,-1000);
+      if (chk.isOK()) m_lastmouseidx=idx;
     }
   }
 
@@ -1194,31 +1196,32 @@ LICE_IBitmap *WDL_VirtualWnd_BGCfgCache::SetCachedBG(int w, int h, int sinfo2, L
   // caller should ALWAYS call GetCachedBG() and use that if present
 
   WDL_VirtualWnd_BGCfgCache_img *img = NULL;
-  unsigned int now = GetTickCount();
+  const DWORD now = GetTickCount();
   bool cacheAtWantSize = cache->GetSize()>=m_want_size;
   if (cacheAtWantSize || owner_hint)
   {
     int x;
     int bestpos=-1;
-    unsigned int bestt=0xffffff00;
+    DWORD best_age=0;
     for(x=0;x<cache->GetSize();x++)
     {
       WDL_VirtualWnd_BGCfgCache_img *a = cache->Get(x);
       if (owner_hint && a->lastowner == owner_hint)
       {
         cacheAtWantSize=true;
-        bestt = now-5000;
+        best_age = 5000;
         bestpos=x;
         break; // FOUND exact match!
       }
-      if (a->lastused < bestt) 
+      const DWORD age = now-a->lastused;
+      if (age > best_age) // find oldest entry
       {
-        bestt=a->lastused;
-        bestpos=x;
+        best_age = age;
+        bestpos = x;
       }
     }
 
-    if (cacheAtWantSize && (bestt < now-500 || cache->GetSize() >= m_max_size)) // use this slot if over 1000ms old, or if we're up against the max size
+    if (cacheAtWantSize && (best_age > 500 || cache->GetSize() >= m_max_size)) // use this slot if over 1000ms old, or if we're up against the max size
     {
       img = cache->Get(bestpos);
       cache->Delete(bestpos,false);
@@ -1503,11 +1506,6 @@ void WDL_VirtualWnd_ScaledBlitBG(LICE_IBitmap *dest,
   int right_margin=src->bgimage_rb[0];
   int bottom_margin=src->bgimage_rb[1];
 
-  int left_margin_out=src->bgimage_lt_out[0];
-  int top_margin_out=src->bgimage_lt_out[1];
-  int right_margin_out=src->bgimage_rb_out[0];
-  int bottom_margin_out=src->bgimage_rb_out[1];
-
   int sw=src->bgimage->getWidth();
   int sh=src->bgimage->getHeight();
 
@@ -1544,9 +1542,18 @@ void WDL_VirtualWnd_ScaledBlitBG(LICE_IBitmap *dest,
     return;
   }
 
+  WDL_ASSERT(src->bgimage_lt_out[0]>0); // if pinklines are nonzero, yellowlines must be too (they are all 1-based)
+  WDL_ASSERT(src->bgimage_lt_out[1]>0); // if these fire, check for uninitialized bgimage_lt_out etc
+  WDL_ASSERT(src->bgimage_rb_out[0]>0);
+  WDL_ASSERT(src->bgimage_rb_out[1]>0);
+
+  const int left_margin_out   = src->bgimage_lt_out[0]-1;
+  const int top_margin_out    = src->bgimage_lt_out[1]-1;
+  const int right_margin_out  = src->bgimage_rb_out[0]-1;
+  const int bottom_margin_out = src->bgimage_rb_out[1]-1;
+
   // remove 1px additional margins from calculations
   left_margin--; top_margin--; right_margin--; bottom_margin--;
-  left_margin_out--; top_margin_out--; right_margin_out--; bottom_margin_out--;
 
   if (left_margin+right_margin>destw) 
   { 
@@ -1750,7 +1757,9 @@ static WNDPROC vwndDlgHost_oldProc;
 static LRESULT CALLBACK vwndDlgHost_newProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   if (msg==WM_ERASEBKGND) return 1;
-  if (msg==WM_PAINT)
+  if (msg==WM_PAINT ||
+      (msg == WM_SETFOCUS && (GetWindowLong(hwnd,GWL_STYLE)&(WS_CHILD|WS_TABSTOP))==(WS_CHILD|WS_TABSTOP))
+      )
   {
     WNDPROC pc=(WNDPROC)GetWindowLongPtr(hwnd,DWLP_DLGPROC);
     if (pc)

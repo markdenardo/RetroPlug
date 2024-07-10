@@ -29,6 +29,7 @@ using namespace Vst;
 IPlugVST3::IPlugVST3(const InstanceInfo& info, const Config& config)
 : IPlugAPIBase(config, kAPIVST3)
 , IPlugVST3ProcessorBase(config, *this)
+, IPlugVST3ControllerBase(parameters)
 , mView(nullptr)
 {
   CreateTimer();
@@ -38,6 +39,11 @@ IPlugVST3::~IPlugVST3() {}
 
 #pragma mark AudioEffect overrides
 
+Steinberg::uint32 PLUGIN_API IPlugVST3::getTailSamples()
+{
+  return GetTailIsInfinite() ? kInfiniteTail : GetTailSize();
+}
+
 tresult PLUGIN_API IPlugVST3::initialize(FUnknown* context)
 {
   TRACE
@@ -45,7 +51,7 @@ tresult PLUGIN_API IPlugVST3::initialize(FUnknown* context)
   if (SingleComponentEffect::initialize(context) == kResultOk)
   {
     IPlugVST3ProcessorBase::Initialize(this);
-    IPlugVST3ControllerBase::Initialize(this, parameters, IsInstrument(), DoesMIDIIn());
+    IPlugVST3ControllerBase::Initialize(this, IsInstrument(), DoesMIDIIn());
 
     IPlugVST3GetHost(this, context);
     OnHostIdentified();
@@ -123,28 +129,26 @@ tresult PLUGIN_API IPlugVST3::getState(IBStream* pState)
 #pragma mark IEditController overrides
 ParamValue PLUGIN_API IPlugVST3::getParamNormalized(ParamID tag)
 {
-  if (tag >= kBypassParam)
-    return EditControllerEx1::getParamNormalized(tag);
-  
-  return IPlugVST3ControllerBase::GetParamNormalized(this, tag);
+  return IPlugVST3ControllerBase::GetParamNormalized(tag);
 }
 
 tresult PLUGIN_API IPlugVST3::setParamNormalized(ParamID tag, ParamValue value)
 {
-  IPlugVST3ControllerBase::SetParamNormalized(this, tag, value);
-  
-  return EditControllerEx1::setParamNormalized(tag, value);
+  if (IPlugVST3ControllerBase::SetParamNormalized(this, tag, value))
+    return kResultTrue;
+  else
+    return kResultFalse;
 }
 
 IPlugView* PLUGIN_API IPlugVST3::createView(const char* name)
 {
-  if (name && strcmp(name, "editor") == 0)
+  if (HasUI() && name && strcmp(name, "editor") == 0)
   {
     mView = new ViewType(*this);
     return mView;
   }
   
-  return 0;
+  return nullptr;
 }
 
 tresult PLUGIN_API IPlugVST3::setEditorState(IBStream* pState)
@@ -207,7 +211,7 @@ void IPlugVST3::EndInformHostOfParamChange(int idx)
 
 void IPlugVST3::InformHostOfParameterDetailsChange()
 {
-  FUnknownPtr<IComponentHandler>handler(componentHandler);
+  FUnknownPtr<IComponentHandler> handler(componentHandler);
   handler->restartComponent(kParamTitlesChanged);
 }
 
@@ -216,7 +220,7 @@ bool IPlugVST3::EditorResize(int viewWidth, int viewHeight)
   if (HasUI())
   {
     if (viewWidth != GetEditorWidth() || viewHeight != GetEditorHeight())
-      mView->resize(viewWidth, viewHeight);
+      mView->Resize(viewWidth, viewHeight);
 
     SetEditorSize(viewWidth, viewHeight);
   }
@@ -224,17 +228,37 @@ bool IPlugVST3::EditorResize(int viewWidth, int viewHeight)
   return true;
 }
 
+#pragma mark IEditorDelegate overrides
+
 void IPlugVST3::DirtyParametersFromUI()
 {
+  for (int i = 0; i < NParams(); i++)
+    IPlugVST3ControllerBase::SetVST3ParamNormalized(i, GetParam(i)->GetNormalized());
+  
   startGroupEdit();
   IPlugAPIBase::DirtyParametersFromUI();
   finishGroupEdit();
 }
 
+void IPlugVST3::SendParameterValueFromUI(int paramIdx, double normalisedValue)
+{
+  IPlugVST3ControllerBase::SetVST3ParamNormalized(paramIdx, normalisedValue);
+  IPlugAPIBase::SendParameterValueFromUI(paramIdx, normalisedValue);
+}
+
 void IPlugVST3::SetLatency(int latency)
 {
+  // N.B. set the latency even if the handler is not yet set
+  
   IPlugProcessor::SetLatency(latency);
 
-  FUnknownPtr<IComponentHandler>handler(componentHandler);
-  handler->restartComponent(kLatencyChanged);
+  if (componentHandler)
+  {
+    FUnknownPtr<IComponentHandler> handler(componentHandler);
+
+    if (handler)
+    {
+      handler->restartComponent(kLatencyChanged);
+    }
+  }
 }

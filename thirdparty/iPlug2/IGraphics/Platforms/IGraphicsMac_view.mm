@@ -14,12 +14,6 @@
 #import <Metal/Metal.h>
 #endif
 
-#ifdef IGRAPHICS_IMGUI
-#import <Metal/Metal.h>
-#include "imgui.h"
-#import "imgui_impl_metal.h"
-#endif
-
 #include "wdlutf8.h"
 
 #import "IGraphicsMac_view.h"
@@ -35,10 +29,6 @@ static int MacKeyCodeToVK(int code)
   switch (code)
   {
     case 51: return kVK_BACK;
-    case 55: return kVK_CONTROL;
-    case 56: return kVK_SHIFT;
-    case 58: return kVK_MENU;
-    case 59: return kVK_LWIN;
     case 65: return kVK_DECIMAL;
     case 67: return kVK_MULTIPLY;
     case 69: return kVK_ADD;
@@ -158,12 +148,12 @@ static int MacKeyEventToVK(NSEvent* pEvent, int& flag)
 
 @implementation IGRAPHICS_MENU
 
-- (id) initWithIPopupMenuAndReciever: (IPopupMenu*) pMenu : (NSView*) pView
+- (id) initWithIPopupMenuAndReceiver: (IPopupMenu*) pMenu : (NSView*) pView
 {
   [self initWithTitle: @""];
 
-  NSMenuItem* nsMenuItem;
-  NSMutableString* nsMenuItemTitle;
+  NSMenuItem* nsMenuItem = nil;
+  NSMutableString* nsMenuItemTitle = nil;
 
   [self setAutoenablesItems:NO];
 
@@ -197,7 +187,7 @@ static int MacKeyEventToVK(NSEvent* pEvent, int& flag)
     else if (pMenuItem->GetSubmenu())
     {
       nsMenuItem = [self addItemWithTitle:nsMenuItemTitle action:nil keyEquivalent:@""];
-      NSMenu* subMenu = [[IGRAPHICS_MENU alloc] initWithIPopupMenuAndReciever:pMenuItem->GetSubmenu() :pView];
+      NSMenu* subMenu = [[IGRAPHICS_MENU alloc] initWithIPopupMenuAndReceiver:pMenuItem->GetSubmenu() :pView];
       [self setSubmenu: subMenu forItem:nsMenuItem];
       [subMenu release];
     }
@@ -208,7 +198,7 @@ static int MacKeyEventToVK(NSEvent* pEvent, int& flag)
       [nsMenuItem setTarget:pView];
     }
     
-    if (!pMenuItem->GetIsSeparator())
+    if (nsMenuItem && !pMenuItem->GetIsSeparator())
     {
       [nsMenuItem setIndentationLevel:pMenuItem->GetIsTitle() ? 1 : 0 ];
       [nsMenuItem setEnabled:pMenuItem->GetEnabled() ? YES : NO];
@@ -278,8 +268,14 @@ static int MacKeyEventToVK(NSEvent* pEvent, int& flag)
     // Center that in the proposed rect
     float heightDelta = outRect.size.height - textSize.height;
     
-    outRect.size.height -= heightDelta;
-    outRect.origin.y += (heightDelta / 2);
+    outRect.origin.x += 3;
+    outRect.size.width -= 6;
+    
+    if (heightDelta > 0) 
+    {
+      outRect.size.height -= heightDelta;
+      outRect.origin.y += (heightDelta / 2);
+    }
   }
   
   return outRect;
@@ -492,7 +488,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   #ifdef IGRAPHICS_GL
   CGLContextObj cglContext = [[self openGLContext] CGLContextObj];
   CGLPixelFormatObj cglPixelFormat = [[self pixelFormat] CGLPixelFormatObj];
-  CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(displayLink, cglContext, cglPixelFormat);
+  CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(mDisplayLink, cglContext, cglPixelFormat);
   #endif
   
   CGDirectDisplayID viewDisplayID =
@@ -546,6 +542,14 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   return YES;
 }
 
+- (void) viewDidChangeEffectiveAppearance
+{
+  if (@available(macOS 10.14, *)) {
+    BOOL isDarkMode = [[[self effectiveAppearance] name] isEqualToString: (NSAppearanceNameDarkAqua)];
+    mGraphics->OnAppearanceChanged(isDarkMode ? EUIAppearance::Dark : EUIAppearance::Light);
+  }
+}
+
 - (BOOL) acceptsFirstResponder
 {
   return YES;
@@ -574,6 +578,12 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(frameDidChange:)
                                                  name:NSViewFrameDidChangeNotification
+                                               object:self];
+    #endif
+    #ifdef IGRAPHICS_GL
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(frameDidChange:)
+                                                 name:NSViewGlobalFrameDidChangeNotification
                                                object:self];
     #endif
     
@@ -625,8 +635,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   #if !defined IGRAPHICS_GL && !defined IGRAPHICS_METAL
   if (mGraphics)
   {
-    if (!mGraphics->GetPlatformContext())
-      mGraphics->SetPlatformContext([self getCGContextRef]);
+    mGraphics->SetPlatformContext([self getCGContextRef]);
       
     if (mGraphics->GetPlatformContext())
     {
@@ -659,14 +668,15 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
       for (int i = 0; i < mDirtyRects.Size(); i++)
         [self setNeedsDisplayInRect:ToNSRect(mGraphics, mDirtyRects.Get(i))];
     #else
-    #ifdef IGRAPHICS_GL
-      [[self openGLContext] makeCurrentContext];
-    #endif
+      #ifdef IGRAPHICS_GL
+        [[self openGLContext] makeCurrentContext];
+      #endif
       // so just draw on each frame, if something is dirty
       mGraphics->Draw(mDirtyRects);
     #endif
     #ifdef IGRAPHICS_GL
     [[self openGLContext] flushBuffer];
+    [NSOpenGLContext clearCurrentContext];
     #endif
   }
 }
@@ -714,7 +724,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
     [mTrackingArea release];
   }
     
-  int opts = (NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways);
+  int opts = (NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingEnabledDuringMouseDrag);
   mTrackingArea = [ [NSTrackingArea alloc] initWithRect:[self bounds] options:opts owner:self userInfo:nil];
   [self addTrackingArea:mTrackingArea];
 }
@@ -797,8 +807,15 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   IMouseInfo info = [self getMouseRight:pEvent];
   if (mGraphics)
   {
-    std::vector<IMouseInfo> list {info};
-    mGraphics->OnMouseDown(list);
+    if (([pEvent clickCount] - 1) % 2)
+    {
+      mGraphics->OnMouseDblClick(info.x, info.y, info.ms);
+    }
+    else
+    {
+      std::vector<IMouseInfo> list {info};
+      mGraphics->OnMouseDown(list);
+    }
   }
 }
 
@@ -895,37 +912,6 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   {
     [[self nextResponder] keyUp:pEvent];
   }
-}
-
-- (void) flagsChanged:(NSEvent *) pEvent
-{
-    int rawcode = [pEvent keyCode];
-
-    int code = MacKeyCodeToVK(rawcode);
-    if (code == 0) {
-        return;
-    }
-    
-    char utf8[5] = { '\n' };
-    IKeyPress keyPress {utf8, code, static_cast<bool>([pEvent modifierFlags] & NSEventModifierFlagShift),
-                                    static_cast<bool>([pEvent modifierFlags] & NSEventModifierFlagCommand),
-                                    static_cast<bool>([pEvent modifierFlags] & NSEventModifierFlagOption)};
-    bool down = false;
-    if (code == kVK_CONTROL) {
-        down = keyPress.C;
-    } else if (code == kVK_SHIFT) {
-        down = keyPress.S;
-    } else if (code == kVK_MENU) {
-        down = keyPress.A;
-    } else if (code == kVK_LWIN) {
-        down = [pEvent modifierFlags] & NSEventModifierFlagControl;
-    }
-    
-    if (down) {
-        mGraphics->OnKeyDown(mPrevX, mPrevY, keyPress);
-    } else {
-        mGraphics->OnKeyUp(mPrevX, mPrevY, keyPress);
-    }
 }
 
 - (void) scrollWheel: (NSEvent*) pEvent
@@ -1103,10 +1089,24 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
 - (IPopupMenu*) createPopupMenu: (IPopupMenu&) menu : (NSRect) bounds;
 {
   IGRAPHICS_MENU_RCVR* pDummyView = [[[IGRAPHICS_MENU_RCVR alloc] initWithFrame:bounds] autorelease];
-  NSMenu* pNSMenu = [[[IGRAPHICS_MENU alloc] initWithIPopupMenuAndReciever:&menu : pDummyView] autorelease];
-  NSPoint wp = {bounds.origin.x, bounds.origin.y + 4};
+  NSMenu* pNSMenu = [[[IGRAPHICS_MENU alloc] initWithIPopupMenuAndReceiver:&menu : pDummyView] autorelease];
+  NSPoint wp = {bounds.origin.x, bounds.origin.y + bounds.size.height + 4};
 
-  [pNSMenu popUpMenuPositioningItem:nil atLocation:wp inView:self];
+  NSMenuItem* pSelectedItem = nil;
+  
+  auto selectedItemIdx = menu.GetChosenItemIdx();
+
+  if (selectedItemIdx > -1)
+  {
+    pSelectedItem = [pNSMenu itemAtIndex:selectedItemIdx];
+  }
+  
+  if (pSelectedItem != nil)
+  {
+    wp = {bounds.origin.x, bounds.origin.y};
+  }
+  
+  [pNSMenu popUpMenuPositioningItem:pSelectedItem atLocation:wp inView:self];
   
   NSMenuItem* pChosenItem = [pDummyView menuItem];
   NSMenu* pChosenMenu = [pChosenItem menu];
@@ -1215,6 +1215,7 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
   [pWindow makeFirstResponder: self];
 
   mTextFieldView = nullptr;
+  mGraphics->ClearInTextEntryControl();
 }
 
 - (BOOL) promptForColor: (IColor&) color : (IColorPickerHandlerFunc) func;
@@ -1262,21 +1263,38 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender
 {
-  NSPasteboard *pPasteBoard = [sender draggingPasteboard];
+  NSPasteboard* pPasteBoard = [sender draggingPasteboard];
 
   if ([[pPasteBoard types] containsObject:NSFilenamesPboardType])
   {
-    NSArray *pFiles = [pPasteBoard propertyListForType:NSFilenamesPboardType];
-    NSString *pFirstFile = [pFiles firstObject];
+    NSArray* pFiles = [pPasteBoard propertyListForType:NSFilenamesPboardType];
     NSPoint point = [sender draggingLocation];
     NSPoint relativePoint = [self convertPoint: point fromView:nil];
     // TODO - fix or remove these values
     float x = relativePoint.x;// - 2.f;
     float y = relativePoint.y;// - 3.f;
-    mGraphics->OnDrop([pFirstFile UTF8String], x, y);
+    if ([pFiles count] == 1)
+    {
+      NSString* pFirstFile = [pFiles firstObject];
+      mGraphics->OnDrop([pFirstFile UTF8String], x, y);
+    }
+    else if ([pFiles count] > 1)
+    {
+      std::vector<const char*> paths([pFiles count]);
+      for (auto i = 0; i < [pFiles count]; i++)
+      {
+        NSString* pFile = [pFiles objectAtIndex: i];
+        paths[i] = [pFile UTF8String];
+      }
+      mGraphics->OnDropMultiple(paths, x, y);
+    }
   }
-
   return YES;
+}
+
+- (NSDragOperation)draggingSession:(NSDraggingSession*) session sourceOperationMaskForDraggingContext:(NSDraggingContext)context
+{
+  return NSDragOperationCopy;
 }
 
 #ifdef IGRAPHICS_METAL
@@ -1288,8 +1306,14 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
                                                           self.frame.size.height * scale)];
 }
 #endif
+#ifdef IGRAPHICS_GL
+- (void) frameDidChange:(NSNotification*) pNotification
+{
+  [[self openGLContext] makeCurrentContext];
+}
+#endif
 
-//- (void)windowResized: (NSNotification *) notification;
+//- (void) windowResized: (NSNotification*) notification;
 //{
 //  if(!mGraphics)
 //    return;
@@ -1327,52 +1351,3 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
 //}
 
 @end
-
-#ifdef IGRAPHICS_IMGUI
-
-@implementation IGRAPHICS_IMGUIVIEW
-{
-}
-
-- (id) initWithIGraphicsView: (IGRAPHICS_VIEW*) pView;
-{
-  mView = pView;
-  self = [super initWithFrame:[pView frame] device: MTLCreateSystemDefaultDevice()];
-  if(self) {
-    _commandQueue = [self.device newCommandQueue];
-    self.layer.opaque = NO;
-  }
-  
-  return self;
-}
-
-- (void) drawRect: (NSRect) dirtyRect
-{
-  id<MTLCommandBuffer> commandBuffer = [self.commandQueue commandBuffer];
-  
-  MTLRenderPassDescriptor *renderPassDescriptor = self.currentRenderPassDescriptor;
-  if (renderPassDescriptor != nil)
-  {
-    renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0,0,0,0);
-    
-    id <MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
-    [renderEncoder pushDebugGroup:@"ImGui IGraphics"];
-    
-    ImGui_ImplMetal_NewFrame(renderPassDescriptor);
-    
-    mView->mGraphics->mImGuiRenderer->DoFrame();
-
-    ImDrawData *drawData = ImGui::GetDrawData();
-    ImGui_ImplMetal_RenderDrawData(drawData, commandBuffer, renderEncoder);
-    
-    [renderEncoder popDebugGroup];
-    [renderEncoder endEncoding];
-    
-    [commandBuffer presentDrawable:self.currentDrawable];
-  }
-  [commandBuffer commit];
-}
-
-@end
-
-#endif

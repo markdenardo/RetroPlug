@@ -47,6 +47,7 @@ class VWndBridgeNS;
 // Returns the UI Element that has the focus. You can assume that the search for the focus has already been narrowed down to the reciever. Override this method to do a deeper search with a UIElement - e.g. a NSMatrix would determine if one of its cells has the focus.
 - (id)accessibilityFocusedUIElement;
 
+- (BOOL)accessibilityPerformShowMenu;
 
 @end
 
@@ -347,7 +348,6 @@ public:
   if ([attribute isEqual:NSAccessibilityTitleAttribute] || [attribute isEqual:NSAccessibilityDescriptionAttribute])// || [attribute isEqual:NSAccessibilityValueDescriptionAttribute])
   {
     const char *str=NULL;
-    int cs=-1;
     if (!strcmp(type,"vwnd_statictext"))
     {
       WDL_VirtualStaticText *t = (WDL_VirtualStaticText *)m_br->vwnd;
@@ -362,7 +362,6 @@ public:
     {
       WDL_VirtualIconButton *b = (WDL_VirtualIconButton *)m_br->vwnd;
       str = b->GetTextLabel();
-      cs = b->GetCheckState();
     }
     if (!str || !*str) str= m_br->vwnd->GetAccessDesc();
     else
@@ -370,24 +369,13 @@ public:
       const char *p = m_br->vwnd->GetAccessDesc();
       if (p && *p)
       {
-        sprintf(buf,"%.512s: %.512s",p,str);
+        if (!strcmp(type,"vwnd_iconbutton"))
+          snprintf(buf,sizeof(buf),"%.512s: %.512s",str,p);
+        else
+          snprintf(buf,sizeof(buf),"%.512s: %.512s",p,str);
         str=buf;
       }
     }
-
-  
-#if 0
-    if (cs>=0)
-    {
-      if (str!=buf)
-      {
-        lstrcpyn(buf,str?str:"",sizeof(buf)-128);
-        str=buf;
-      }
-//      strcat(buf,cs>0 ? " checked" : " unchecked");
-      
-    }
-#endif
     
     if (str && *str) return [(id)SWELL_CStringToCFString(str) autorelease];
   }
@@ -466,7 +454,16 @@ public:
     if ([value isKindOfClass:[NSNumber class]])
     {
       NSNumber *p = (NSNumber *)value;
-      if ([p boolValue]) __focus = m_br->vwnd;
+      if ([p boolValue])
+      {
+        __focus = m_br->vwnd;
+        // if vwnd maps perfectly to a HWND, set that HWND focus
+        if (m_br->vwnd && !m_br->vwnd->GetParent() && !m_br->vwnd->GetNumChildren())
+        {
+          HWND h = m_br->vwnd->GetRealParent();
+          if (h) SetFocus(h);
+        }
+      }
       else if (__focus == m_br->vwnd) __focus=NULL;
     }
   }
@@ -648,6 +645,34 @@ public:
 }
 
 
+- (BOOL)accessibilityPerformShowMenu
+{
+  if (m_br->vwnd)
+  {
+    HWND h = m_br->vwnd->GetRealParent();
+    if (h)
+    {
+      RECT r;
+      WDL_VWnd *v = m_br->vwnd;
+      v->GetPosition(&r);
+      r.left = (r.right+r.left)/2;
+      r.bottom = (r.bottom+r.top)/2;
+      for (;;)
+      {
+        v=v->GetParent();
+        if (!v) break;
+        RECT r2;
+        v->GetPosition(&r2);
+        r.left += r2.left;
+        r.top += r2.top;
+      }
+      ClientToScreen(h,(LPPOINT)&r);
+      SendMessage(h,WM_CONTEXTMENU,(WPARAM)h,MAKELONG(r.left,r.top));
+      return YES;
+    }
+  }
+  return NO;
+}
 @end
 
 

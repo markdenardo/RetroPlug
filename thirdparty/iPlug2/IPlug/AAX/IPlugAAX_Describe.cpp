@@ -9,7 +9,7 @@
 */
 
 #include "IPlugAAX.h"
-#include "config.h"
+#include "../../../../config/config.h"
 
 //AAX Components
 #include "AAX_ICollection.h"

@@ -225,7 +225,7 @@ BEGIN
             VALUE "InternalName", "IPlugControls"
             VALUE "ProductName", "IPlugControls"
             VALUE "CompanyName", "AcmeInc"
-            VALUE "LegalCopyright", "Copyright 2019 Acme Inc"
+            VALUE "LegalCopyright", "Copyright 2020 Acme Inc"
             VALUE "LegalTrademarks", "VST is a trademark of Steinberg Media Technologies GmbH, Audio Unit is a trademark of Apple, Inc."
         END
     END
@@ -245,7 +245,7 @@ END
 //
 // Generated from the TEXTINCLUDE 3 resource.
 //
-#include "..\config.h"
+#include "../../../../../config/config.h"
 ROBOTO_FN TTF ROBOTO_FN
 FORK_AWESOME_FN TTF FORK_AWESOME_FN
 FONTAUDIO_FN TTF FONTAUDIO_FN

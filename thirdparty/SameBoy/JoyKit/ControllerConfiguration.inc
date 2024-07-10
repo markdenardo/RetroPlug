@@ -172,7 +172,7 @@ hacksByName = @{
         JOYConnectedUsage: @2,
         JOYConnectedUsagePage: @0xFF00,
         
-        JOYActivationReport: [NSData dataWithBytes:(uint8_t[]){0x13} length:1],
+        JOYActivationReport: [NSData dataWithBytes:&inline_const(uint8_t, 0x13) length:1],
 
         JOYCustomReports: @{
             
@@ -583,6 +583,25 @@ hacksByName = @{
         JOYIgnoredReports: @[@(0x30)], // Ignore the real 0x30 report as it's broken
     },
 
+    
+    @"NSW wired controller": @{ // Wired Switch controllers
+            JOYButtonUsageMapping: @{
+                    BUTTON(1): @(JOYButtonUsageY),
+                    BUTTON(2): @(JOYButtonUsageB),
+                    BUTTON(3): @(JOYButtonUsageA),
+                    BUTTON(4): @(JOYButtonUsageX),
+                    BUTTON(5): @(JOYButtonUsageL1),
+                    BUTTON(6): @(JOYButtonUsageR1),
+                    BUTTON(7): @(JOYButtonUsageL2),
+                    BUTTON(8): @(JOYButtonUsageR2),
+                    BUTTON(9): @(JOYButtonUsageSelect),
+                    BUTTON(10): @(JOYButtonUsageStart),
+                    BUTTON(11): @(JOYButtonUsageLStick),
+                    BUTTON(12): @(JOYButtonUsageRStick),
+                    BUTTON(13): @(JOYButtonUsageHome),
+                    BUTTON(14): @(JOYButtonUsageMisc),
+            },
+    },
     
     @"PLAYSTATION(R)3 Controller": @{ // DualShock 3
         JOYAxisGroups: @{

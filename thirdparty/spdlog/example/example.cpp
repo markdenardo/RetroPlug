@@ -272,7 +272,7 @@ struct my_type {
 #ifndef SPDLOG_USE_STD_FORMAT  // when using fmtlib
 template <>
 struct fmt::formatter<my_type> : fmt::formatter<std::string> {
-    auto format(my_type my, format_context &ctx) -> decltype(ctx.out()) {
+    auto format(my_type my, format_context &ctx) const -> decltype(ctx.out()) {
         return fmt::format_to(ctx.out(), "[my_type i={}]", my.i);
     }
 };

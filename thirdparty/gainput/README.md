@@ -1,4 +1,7 @@
-Gainput [![Build Status](https://travis-ci.org/jkuhlmann/gainput.png?branch=master)](https://travis-ci.org/jkuhlmann/gainput) [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+This project is archived. It's neither maintained nor developed anymore.
+=======
+
+Gainput [![Build Status](https://travis-ci.org/jkuhlmann/gainput.png?branch=master)](https://travis-ci.org/jkuhlmann/gainput) [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 =======
 
 Gainput is the awesome C++ input library for your game:
