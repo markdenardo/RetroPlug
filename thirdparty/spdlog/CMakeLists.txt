@@ -156,7 +156,7 @@ endif()
 
 if(SPDLOG_BUILD_SHARED OR BUILD_SHARED_LIBS)
     if(WIN32)
-        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
+        configure_file(cmake/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
         list(APPEND SPDLOG_SRCS ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
     endif()
     add_library(spdlog SHARED ${SPDLOG_SRCS} ${SPDLOG_ALL_HEADERS})
@@ -190,7 +190,7 @@ set_target_properties(spdlog PROPERTIES VERSION ${SPDLOG_VERSION} SOVERSION
 set_target_properties(spdlog PROPERTIES DEBUG_POSTFIX d)
 
 if(COMMAND target_precompile_headers AND SPDLOG_ENABLE_PCH)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pch.h.in ${PROJECT_BINARY_DIR}/spdlog_pch.h @ONLY)
+    configure_file(cmake/pch.h.in ${PROJECT_BINARY_DIR}/spdlog_pch.h @ONLY)
     target_precompile_headers(spdlog PRIVATE ${PROJECT_BINARY_DIR}/spdlog_pch.h)
 endif()
 
@@ -300,7 +300,7 @@ endif()
 # ---------------------------------------------------------------------------------------
 if(SPDLOG_INSTALL)
     message(STATUS "Generating install")
-    set(project_config_in "${CMAKE_CURRENT_LIST_DIR}/cmake/spdlogConfig.cmake.in")
+    set(project_config_in "cmake/spdlogConfig.cmake.in")
     set(project_config_out "${CMAKE_CURRENT_BINARY_DIR}/spdlogConfig.cmake")
     set(config_targets_file "spdlogConfigTargets.cmake")
     set(version_config_file "${CMAKE_CURRENT_BINARY_DIR}/spdlogConfigVersion.cmake")
@@ -311,7 +311,7 @@ if(SPDLOG_INSTALL)
     # ---------------------------------------------------------------------------------------
     # Include files
     # ---------------------------------------------------------------------------------------
-    install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}" PATTERN "fmt/bundled" EXCLUDE)
+    install(DIRECTORY include DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}" PATTERN "fmt/bundled" EXCLUDE)
     install(
         TARGETS spdlog spdlog_header_only
         EXPORT spdlog
